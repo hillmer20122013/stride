@@ -166,7 +166,16 @@
       <div class="row"><div>3-second countdown</div><button class="toggle" id="tCount"></button></div>
       <div class="row"><div>Auto-pause<small>Pauses when you stop moving</small></div><button class="toggle" id="tAuto"></button></div>
       <div class="row"><div>Keep screen on<small>Needed for GPS in a browser</small></div><button class="toggle" id="tWake"></button></div>
-      <div class="row"><div>Body weight (lb)<small>For calorie estimate</small></div><input type="number" id="weight" min="60" max="500"></div>
+      <div class="sec">Your Profile</div>
+      <div class="row"><div>Weight<small>Pounds</small></div><input type="number" inputmode="decimal" id="pWeight" min="60" max="600" placeholder="lb"></div>
+      <div class="row"><div>Height</div><div style="display:flex;gap:6px;align-items:center">
+        <input type="number" inputmode="numeric" id="pFt" min="3" max="8" placeholder="ft" style="width:56px"><span style="color:var(--dim)">ft</span>
+        <input type="number" inputmode="numeric" id="pIn" min="0" max="11" placeholder="in" style="width:56px"><span style="color:var(--dim)">in</span></div></div>
+      <div class="row"><div>Age</div><input type="number" inputmode="numeric" id="pAge" min="10" max="100" placeholder="yrs"></div>
+      <div class="row"><div>Sex<small>Used for resting metabolism</small></div>
+        <div class="seg small" id="sexSeg"><button data-s="male">Male</button><button data-s="female">Female</button></div></div>
+      <button class="btn-wide" id="saveProfile" style="margin-top:6px">Save Profile</button>
+      <div class="hint" id="profHint" style="margin-top:8px"></div>
       <div class="sec">Data</div>
       <div class="row"><div>Try a simulated run<small>Preview the tracker without GPS</small></div><button class="btn-sm" id="demoBtn">Start</button></div>
       <div class="row"><div>Copy all runs (JSON)<small>Back up your history</small></div><button class="btn-sm" id="copyAll">Copy</button></div>
@@ -196,7 +205,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem("stride_"+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem("stride_"+k, JSON.stringify(v)); return true; }catch(e){ return false; } }
 };
-const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170}, store.get("settings", {}));
+const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170, heightIn:null, age:null, sex:""}, store.get("settings", {}));
 let runs = store.get("runs", []);
 const saveSettings = () => store.set("settings", settings);
 const saveRuns = () => store.set("runs", runs);
@@ -222,7 +231,23 @@ function fmtPace(secPerUnit){
   return s === 60 ? `${m+1}'00"` : `${m}'${String(s).padStart(2,"0")}"`;
 }
 const fmtDist = m => (m / M_PER()).toFixed(2);
-const kcal = m => Math.round((settings.weight*0.4536) * (m/1000) * 1.036);
+/* Calories: ACSM running equation for the work of running (horizontal + climbing),
+   plus your personal resting burn from the Mifflin-St Jeor equation (weight, height, age, sex).
+   VO2 net (ml/kg) = 0.2 * meters run + 0.9 * meters climbed; ~5 kcal per liter O2. */
+function restingKcalPerMin(){
+  const kg = settings.weight*0.4536;
+  if(settings.heightIn && settings.age){
+    const cm = settings.heightIn*2.54;
+    const sexAdj = settings.sex==="male" ? 5 : settings.sex==="female" ? -161 : -78;
+    return (10*kg + 6.25*cm - 5*settings.age + sexAdj) / 1440;
+  }
+  return 3.5*kg/1000*5;               // standard 1 MET if profile incomplete
+}
+function kcal(distM, ms, elevM){
+  const kg = settings.weight*0.4536;
+  const work = 5*kg/1000*(0.2*distM + 0.9*(elevM||0));
+  return Math.round(work + restingKcalPerMin()*(ms/60000));
+}
 const dateStr = t => new Date(t).toLocaleDateString(undefined,{weekday:"short", month:"short", day:"numeric"});
 const timeOfDay = t => { const h = new Date(t).getHours(); return h<5?"Night":h<12?"Morning":h<17?"Afternoon":h<21?"Evening":"Night"; };
 
@@ -449,7 +474,7 @@ function tick(){
   $("time").textContent = fmtTime(el);
   $("pace").textContent = run.state==="running" && !run.autoPaused ? fmtPace(currentPace()) : `--'--"`;
   $("avg").textContent = run.dist > 30 ? fmtPace((el/1000)/(run.dist/M_PER())) : `--'--"`;
-  $("cal").textContent = kcal(run.dist);
+  $("cal").textContent = run.dist > 0 || el > 0 ? kcal(run.dist, el, run.elevGain) : 0;
   $("elev").textContent = settings.unit==="mi" ? Math.round(run.elevGain*3.281) : Math.round(run.elevGain);
   const inSplit = run.dist - run.lastSplitDist;
   $("splitNow").textContent = run.dist > 30 && inSplit > 30 ? fmtPace(((el - run.lastSplitMs)/1000)/(inSplit/M_PER())) : "--";
@@ -570,7 +595,7 @@ function openRun(id){
     <div class="stats" style="margin:18px 0">
       <div class="stat"><div class="v">${fmtPace((r.ms/1000)/(r.dist/M_PER()))}</div><div class="l">Avg Pace</div></div>
       <div class="stat"><div class="v">${fmtTime(r.ms)}</div><div class="l">Time</div></div>
-      <div class="stat"><div class="v">${kcal(r.dist)}</div><div class="l">Calories</div></div>
+      <div class="stat"><div class="v">${kcal(r.dist, r.ms, r.elev)}</div><div class="l">Calories</div></div>
     </div>
     <canvas class="route" id="detailMap" style="height:240px"></canvas>
     <div class="stats sm" style="margin:16px 0 0">
@@ -634,8 +659,38 @@ $("unitPill").onclick = () => { if(run.state==="idle"){ settings.unit = settings
   const t = $(id); t.classList.toggle("on", settings[key]);
   t.onclick = () => { settings[key] = !settings[key]; t.classList.toggle("on", settings[key]); saveSettings(); };
 });
-$("weight").value = settings.weight;
-$("weight").onchange = e => { const v = +e.target.value; if(v >= 60 && v <= 500){ settings.weight = v; saveSettings(); tick(); } };
+/* profile */
+let pSex = settings.sex;
+function loadProfile(){
+  $("pWeight").value = settings.weight || "";
+  if(settings.heightIn){ $("pFt").value = Math.floor(settings.heightIn/12); $("pIn").value = settings.heightIn%12; }
+  $("pAge").value = settings.age || "";
+  document.querySelectorAll("#sexSeg button").forEach(b => b.classList.toggle("on", b.dataset.s === pSex));
+  profileHint();
+}
+function profileHint(){
+  const done = settings.weight && settings.heightIn && settings.age && settings.sex;
+  $("profHint").textContent = done ? `Saved · resting burn about ${Math.round(restingKcalPerMin()*1440)} kcal/day`
+    : "Fill in all four for the most accurate calories";
+}
+document.querySelectorAll("#sexSeg button").forEach(b => b.onclick = () => {
+  pSex = b.dataset.s; document.querySelectorAll("#sexSeg button").forEach(x => x.classList.toggle("on", x===b)); });
+$("saveProfile").onclick = () => {
+  const w = parseFloat($("pWeight").value), ft = parseInt($("pFt").value), inch = parseInt($("pIn").value || "0"), age = parseInt($("pAge").value);
+  const errs = [];
+  if(!(w >= 60 && w <= 600)) errs.push("weight (60–600 lb)");
+  if(!(ft >= 3 && ft <= 8) || !(inch >= 0 && inch <= 11)) errs.push("height");
+  if(!(age >= 10 && age <= 100)) errs.push("age (10–100)");
+  if(!pSex) errs.push("sex");
+  if(errs.length){ modal("Check your profile", "Please enter a valid " + errs.join(", ") + ".", [["OK"]]); return; }
+  Object.assign(settings, { weight:w, heightIn: ft*12+inch, age, sex:pSex });
+  const ok = saveSettings();
+  document.activeElement && document.activeElement.blur();
+  if(!ok){ modal("Couldn't save", "Your browser is blocking storage. If you're in Private Browsing, switch to a normal Safari tab.", [["OK"]]); return; }
+  const b = $("saveProfile"); b.textContent = "Saved ✓"; setTimeout(() => b.textContent = "Save Profile", 1600);
+  profileHint(); tick(); renderHistory();
+};
+loadProfile();
 $("demoBtn").onclick = startDemo;
 $("copyAll").onclick = async () => { const ok = await copyText(JSON.stringify(runs)); $("copyAll").textContent = ok ? "Copied" : "Blocked"; setTimeout(()=>$("copyAll").textContent="Copy",1500); };
 $("wipe").onclick = () => modal("Delete all runs?", `This removes ${runs.length} saved run${runs.length!==1?"s":""} from this device.`, [["Cancel"],["Delete all", () => { runs = []; saveRuns(); renderHistory(); }, "danger"]]);
