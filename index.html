@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stride">
+<title>Stride Run Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b0c; --card:#161618; --card2:#1f1f22; --line:#2a2a2e;
+    --text:#f5f5f7; --dim:#8e8e93; --accent:#d4ff3a; --accent-ink:#0b0b0c;
+    --red:#ff453a; --orange:#ff9f0a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:Inter,system-ui,-apple-system,sans-serif;overscroll-behavior:none}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  button{font-family:inherit;border:0;cursor:pointer;color:inherit;background:none}
+  .app{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+  header h1{font-size:22px;font-weight:900;letter-spacing:-.5px;margin:0;font-style:italic}
+  header h1 span{color:var(--accent)}
+  .pill{background:var(--card2);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--dim)}
+  main{flex:1;padding:8px 18px 100px}
+  nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;
+    background:rgba(11,11,12,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom);z-index:5}
+  nav .inner{display:flex;max-width:520px;width:100%}
+  nav button{flex:1;padding:12px 0 14px;font-size:12px;font-weight:600;color:var(--dim);display:flex;flex-direction:column;align-items:center;gap:4px}
+  nav button.on{color:var(--text)}
+  nav svg{width:22px;height:22px}
+  .view{display:none}.view.on{display:block}
+
+  /* RUN */
+  .gps{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);font-weight:600;margin:6px 0 4px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
+  .dot.good{background:#30d158;box-shadow:0 0 10px #30d158}.dot.ok{background:var(--orange)}.dot.bad{background:var(--red)}
+  .big{text-align:center;margin:26px 0 6px}
+  .big .num{font-size:104px;font-weight:900;font-style:italic;letter-spacing:-4px;line-height:.9;font-variant-numeric:tabular-nums}
+  .big .lbl{font-size:15px;color:var(--dim);font-weight:600;margin-top:8px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:26px 0 18px}
+  .stat{text-align:center}
+  .stat .v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+  .stat .l{font-size:12px;color:var(--dim);font-weight:600;margin-top:2px}
+  .stats.sm .v{font-size:19px}
+  canvas.route{width:100%;height:190px;background:var(--card);border-radius:18px;display:block}
+  .controls{display:flex;justify-content:center;align-items:center;gap:22px;margin:24px 0 8px}
+  .btn-round{width:96px;height:96px;border-radius:50%;font-weight:900;font-size:17px;letter-spacing:.5px;display:flex;align-items:center;justify-content:center;position:relative}
+  .btn-go{background:var(--accent);color:var(--accent-ink);width:132px;height:132px;font-size:24px;font-style:italic;box-shadow:0 0 40px rgba(212,255,58,.25)}
+  .btn-pause{background:var(--text);color:var(--bg)}
+  .btn-stop{background:var(--card2);color:var(--text);overflow:hidden}
+  .btn-stop .fill{position:absolute;inset:0;background:var(--red);transform:scaleY(0);transform-origin:bottom;border-radius:50%}
+  .btn-stop span{position:relative;font-size:13px;line-height:1.15}
+  .btn-round svg{width:34px;height:34px}
+  .hint{text-align:center;color:var(--dim);font-size:12px;min-height:16px}
+  .msg{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.45;color:var(--dim);margin-top:14px}
+  .msg b{color:var(--text)}
+  .link{color:var(--accent);font-weight:700;text-decoration:underline;background:none;padding:0;font-size:inherit}
+
+  /* SPLITS */
+  .sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:22px 0 10px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  td,th{padding:9px 4px;text-align:left;font-size:15px;border-bottom:1px solid var(--line)}
+  th{font-size:12px;color:var(--dim);font-weight:600}
+  .bar{height:8px;border-radius:4px;background:var(--accent)}
+
+  /* HISTORY */
+  .totals{background:linear-gradient(135deg,#1c1f10,#161618);border:1px solid #2c3315;border-radius:20px;padding:18px;margin-top:8px}
+  .totals .tnum{font-size:54px;font-weight:900;font-style:italic;letter-spacing:-2px;line-height:1}
+  .seg{display:flex;background:var(--card2);border-radius:10px;padding:3px;margin-bottom:14px}
+  .seg button{flex:1;padding:7px 0;border-radius:8px;font-size:13px;font-weight:700;color:var(--dim)}
+  .seg button.on{background:var(--text);color:var(--bg)}
+  .runcard{display:flex;gap:14px;align-items:center;background:var(--card);border-radius:16px;padding:12px;margin-bottom:10px;width:100%;text-align:left}
+  .runcard canvas{width:64px;height:64px;border-radius:12px;background:var(--card2);flex:none}
+  .runcard .t{font-size:13px;color:var(--dim);font-weight:600}
+  .runcard .d{font-size:24px;font-weight:900;font-style:italic;letter-spacing:-.5px}
+  .runcard .s{font-size:13px;color:var(--dim);margin-top:2px;font-variant-numeric:tabular-nums}
+  .empty{text-align:center;color:var(--dim);padding:40px 10px;font-size:14px}
+
+  /* SETTINGS */
+  .row{display:flex;justify-content:space-between;align-items:center;background:var(--card);padding:14px 16px;border-radius:14px;margin-bottom:8px;font-size:15px;font-weight:600}
+  .row small{display:block;color:var(--dim);font-weight:400;font-size:12px;margin-top:2px}
+  .toggle{width:50px;height:30px;border-radius:15px;background:var(--line);position:relative;transition:.2s;flex:none}
+  .toggle::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s}
+  .toggle.on{background:var(--accent)}.toggle.on::after{left:23px}
+  input[type=number]{background:var(--card2);border:0;color:var(--text);font:inherit;width:80px;padding:8px;border-radius:8px;text-align:right}
+  .seg.small{margin:0;width:120px}
+
+  /* SHEET */
+  .sheet{position:fixed;inset:0;background:var(--bg);z-index:20;overflow:auto;display:none;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .sheet.on{display:block}
+  .sheet .wrap{max-width:520px;margin:0 auto;padding:12px 18px 40px}
+  .sheet-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .btn-sm{background:var(--card2);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:700}
+  .btn-sm.danger{color:var(--red)}
+  .btn-wide{display:block;width:100%;background:var(--accent);color:var(--accent-ink);font-weight:900;font-size:16px;padding:16px;border-radius:14px;margin-top:18px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:30;padding:20px}
+  .modal.on{display:flex}
+  .modal .box{background:var(--card);border-radius:20px;padding:22px;max-width:340px;width:100%;text-align:center}
+  .modal .box p{color:var(--dim);font-size:14px;line-height:1.5}
+  .modal .acts{display:flex;gap:10px;margin-top:16px}.modal .acts button{flex:1}
+  .countdown{position:fixed;inset:0;background:var(--accent);color:var(--accent-ink);display:none;align-items:center;justify-content:center;font-size:200px;font-weight:900;font-style:italic;z-index:40}
+  .countdown.on{display:flex}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>STRIDE<span>.</span></h1>
+    <div class="pill" id="unitPill">mi</div>
+  </header>
+
+  <main>
+    <!-- RUN VIEW -->
+    <section class="view on" id="v-run">
+      <div class="gps"><div class="dot" id="gpsDot"></div><span id="gpsText">GPS idle</span></div>
+      <div class="big">
+        <div class="num" id="dist">0.00</div>
+        <div class="lbl" id="distLbl">Miles</div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="pace">--'--"</div><div class="l">Pace</div></div>
+        <div class="stat"><div class="v" id="time">00:00</div><div class="l">Time</div></div>
+        <div class="stat"><div class="v" id="avg">--'--"</div><div class="l">Avg Pace</div></div>
+      </div>
+      <div class="stats sm" style="margin-top:-6px">
+        <div class="stat"><div class="v" id="cal">0</div><div class="l">Calories</div></div>
+        <div class="stat"><div class="v" id="elev">0</div><div class="l" id="elevLbl">Elev Gain (ft)</div></div>
+        <div class="stat"><div class="v" id="splitNow">--</div><div class="l" id="splitLbl">Current Mile</div></div>
+      </div>
+      <canvas class="route" id="liveMap"></canvas>
+      <div class="controls" id="controls"></div>
+      <div class="hint" id="hint"></div>
+      <div class="msg" id="gpsMsg" style="display:none"></div>
+    </section>
+
+    <!-- ACTIVITY VIEW -->
+    <section class="view" id="v-hist">
+      <div class="seg" id="periodSeg">
+        <button data-p="week" class="on">Week</button><button data-p="month">Month</button><button data-p="year">Year</button><button data-p="all">All</button>
+      </div>
+      <div class="totals">
+        <div class="tnum" id="totDist">0.0</div>
+        <div style="color:var(--dim);font-weight:600;font-size:14px;margin-top:4px" id="totLbl">Miles this week</div>
+        <div class="stats sm" style="margin:16px 0 0">
+          <div class="stat"><div class="v" id="totRuns">0</div><div class="l">Runs</div></div>
+          <div class="stat"><div class="v" id="totPace">--'--"</div><div class="l">Avg Pace</div></div>
+          <div class="stat"><div class="v" id="totTime">0:00</div><div class="l">Time</div></div>
+        </div>
+      </div>
+      <div class="sec">Recent Runs</div>
+      <div id="runList"></div>
+    </section>
+
+    <!-- SETTINGS VIEW -->
+    <section class="view" id="v-set">
+      <div class="sec" style="margin-top:6px">Preferences</div>
+      <div class="row"><div>Units</div>
+        <div class="seg small" id="unitSeg"><button data-u="mi">Miles</button><button data-u="km">Km</button></div></div>
+      <div class="row"><div>Audio feedback<small>Spoken split every mile/km</small></div><button class="toggle" id="tAudio"></button></div>
+      <div class="row"><div>3-second countdown</div><button class="toggle" id="tCount"></button></div>
+      <div class="row"><div>Auto-pause<small>Pauses when you stop moving</small></div><button class="toggle" id="tAuto"></button></div>
+      <div class="row"><div>Keep screen on<small>Needed for GPS in a browser</small></div><button class="toggle" id="tWake"></button></div>
+      <div class="row"><div>Body weight (lb)<small>For calorie estimate</small></div><input type="number" id="weight" min="60" max="500"></div>
+      <div class="sec">Data</div>
+      <div class="row"><div>Try a simulated run<small>Preview the tracker without GPS</small></div><button class="btn-sm" id="demoBtn">Start</button></div>
+      <div class="row"><div>Copy all runs (JSON)<small>Back up your history</small></div><button class="btn-sm" id="copyAll">Copy</button></div>
+      <div class="row"><div>Delete all runs</div><button class="btn-sm danger" id="wipe">Delete</button></div>
+      <div class="msg">Runs are saved on this device in this browser. GPS only updates while this page is open and on screen, so keep “Keep screen on” enabled and the app in front during a run.</div>
+    </section>
+  </main>
+
+  <nav><div class="inner">
+    <button class="on" data-v="run"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="14" cy="4" r="2"/><path d="M8 21l3-6 3 2v5M6 12l3-4 4 1 3 4 3 1"/></svg>Run</button>
+    <button data-v="hist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Activity</button>
+    <button data-v="set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+  </div></nav>
+</div>
+
+<!-- Run detail sheet -->
+<div class="sheet" id="sheet"><div class="wrap" id="sheetBody"></div></div>
+<!-- Modal -->
+<div class="modal" id="modal"><div class="box"><h3 id="mTitle" style="margin:0 0 6px"></h3><p id="mText"></p><div class="acts" id="mActs"></div></div></div>
+<div class="countdown" id="countdown">3</div>
+
+<script>
+(() => {
+"use strict";
+/* ---------- storage (safe) ---------- */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem("stride_"+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("stride_"+k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+};
+const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170}, store.get("settings", {}));
+let runs = store.get("runs", []);
+const saveSettings = () => store.set("settings", settings);
+const saveRuns = () => store.set("runs", runs);
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const M_PER = () => settings.unit === "mi" ? 1609.344 : 1000;
+const unitWord = (n=2) => settings.unit === "mi" ? (n===1?"Mile":"Miles") : (n===1?"Kilometer":"Kilometers");
+const toRad = d => d*Math.PI/180;
+function hav(a, b){
+  const R = 6371008.8, dLat = toRad(b.lat-a.lat), dLon = toRad(b.lon-a.lon);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+function fmtTime(ms, forceH){
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = s%60;
+  const p = n => String(n).padStart(2,"0");
+  return (h||forceH) ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+}
+function fmtPace(secPerUnit){
+  if(!isFinite(secPerUnit) || secPerUnit <= 0 || secPerUnit > 3600) return `--'--"`;
+  const m = Math.floor(secPerUnit/60), s = Math.round(secPerUnit%60);
+  return s === 60 ? `${m+1}'00"` : `${m}'${String(s).padStart(2,"0")}"`;
+}
+const fmtDist = m => (m / M_PER()).toFixed(2);
+const kcal = m => Math.round((settings.weight*0.4536) * (m/1000) * 1.036);
+const dateStr = t => new Date(t).toLocaleDateString(undefined,{weekday:"short", month:"short", day:"numeric"});
+const timeOfDay = t => { const h = new Date(t).getHours(); return h<5?"Night":h<12?"Morning":h<17?"Afternoon":h<21?"Evening":"Night"; };
+
+/* ---------- modal ---------- */
+function modal(title, text, actions){
+  $("mTitle").textContent = title; $("mText").textContent = text;
+  const a = $("mActs"); a.innerHTML = "";
+  actions.forEach(([label, fn, cls]) => {
+    const b = document.createElement("button"); b.className = "btn-sm " + (cls||""); b.textContent = label;
+    b.onclick = () => { $("modal").classList.remove("on"); fn && fn(); };
+    a.appendChild(b);
+  });
+  $("modal").classList.add("on");
+}
+
+/* ---------- speech ---------- */
+function say(text){
+  if(!settings.audio) return;
+  try{ const u = new SpeechSynthesisUtterance(text); u.rate = 1; speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){}
+}
+function spokenTime(ms){
+  const s = Math.round(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = s%60;
+  return [h?`${h} hour${h>1?"s":""}`:"", m?`${m} minute${m>1?"s":""}`:"", `${sec} second${sec!==1?"s":""}`].filter(Boolean).join(" ");
+}
+
+/* ---------- wake lock ---------- */
+let wakeLock = null;
+async function lockScreen(){
+  if(!settings.wake || !("wakeLock" in navigator)) return;
+  try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){}
+}
+function unlockScreen(){ try{ wakeLock && wakeLock.release(); }catch(e){} wakeLock = null; }
+document.addEventListener("visibilitychange", () => { if(document.visibilityState==="visible" && run.state==="running") lockScreen(); });
+
+/* ---------- run state ---------- */
+const run = { state:"idle", startedAt:0, activeMs:0, resumedAt:0, dist:0, pts:[], seg:0,
+  splits:[], lastSplitMs:0, lastSplitDist:0, elevGain:0, lastAlt:null, watchId:null, demo:false, demoTimer:null,
+  lastMoveAt:0, autoPaused:false };
+const elapsed = () => run.activeMs + (run.state==="running" && !run.autoPaused ? performance.now()-run.resumedAt : 0);
+
+function resetRun(){
+  Object.assign(run, { state:"idle", startedAt:0, activeMs:0, resumedAt:0, dist:0, pts:[], seg:0, splits:[],
+    lastSplitMs:0, lastSplitDist:0, elevGain:0, lastAlt:null, demo:false, lastMoveAt:0, autoPaused:false });
+}
+
+/* ---------- GPS ---------- */
+let lastFix = null;
+function setGps(level, text){
+  const d = $("gpsDot"); d.className = "dot " + (level||""); $("gpsText").textContent = text;
+}
+function gpsQuality(acc){
+  if(acc <= 12) setGps("good", `GPS strong · ±${Math.round(acc)} m`);
+  else if(acc <= 30) setGps("ok", `GPS fair · ±${Math.round(acc)} m`);
+  else setGps("bad", `GPS weak · ±${Math.round(acc)} m`);
+}
+function startWatch(){
+  if(!("geolocation" in navigator)){ gpsFail("This browser has no GPS access."); return; }
+  if(run.watchId != null) return;
+  setGps("ok", "Finding GPS…");
+  try{
+    run.watchId = navigator.geolocation.watchPosition(onFix, onGpsErr, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+  }catch(e){ gpsFail("Location is blocked here."); }
+}
+function stopWatch(){ if(run.watchId != null){ try{ navigator.geolocation.clearWatch(run.watchId); }catch(e){} } run.watchId = null; }
+function onGpsErr(err){
+  if(err.code === 1) gpsFail("Location permission was denied or is blocked on this page.");
+  else if(err.code === 3) setGps("bad", "GPS timeout — searching…");
+  else setGps("bad", "GPS unavailable — searching…");
+}
+function gpsFail(reason){
+  setGps("bad", "GPS blocked");
+  const m = $("gpsMsg"); m.style.display = "block";
+  m.innerHTML = `<b>${reason}</b><br>If you're viewing this inside Claude, location is blocked by design — open the app from your own hosted link to track real runs. You can still <button class="link" id="demoLink">try a simulated run</button>.`;
+  $("demoLink").onclick = startDemo;
+}
+function onFix(pos){
+  const c = pos.coords;
+  lastFix = { lat:c.latitude, lon:c.longitude, acc:c.accuracy, alt:c.altitude, t:pos.timestamp || Date.now() };
+  gpsQuality(c.accuracy);
+  $("gpsMsg").style.display = "none";
+  if(run.state === "running") addPoint(lastFix);
+}
+
+function addPoint(p){
+  if(p.acc > 35) return;                     // reject bad fixes
+  const prev = [...run.pts].reverse().find(q => q.seg === run.seg);
+  if(prev){
+    const d = hav(prev, p), dt = (p.t - prev.t)/1000;
+    if(dt <= 0) return;
+    const v = d/dt;
+    if(v > 12) return;                        // >12 m/s = glitch for a runner
+    if(d < Math.max(2, p.acc*0.25)) {          // jitter while standing
+      checkAutoPause(p.t); return;
+    }
+    run.dist += d;
+    run.lastMoveAt = p.t;
+    if(run.autoPaused) resumeFromAuto();
+    if(p.alt != null && run.lastAlt != null){ const dz = p.alt - run.lastAlt; if(dz > 1) run.elevGain += dz; }
+  } else { run.lastMoveAt = p.t; }
+  if(p.alt != null) run.lastAlt = p.alt;
+  run.pts.push({ lat:+p.lat.toFixed(6), lon:+p.lon.toFixed(6), t:p.t, alt:p.alt!=null?Math.round(p.alt*10)/10:null, seg:run.seg, el:elapsed(), d:run.dist });
+  checkSplit();
+}
+
+function checkAutoPause(t){
+  if(!settings.autopause || run.autoPaused || run.state!=="running") return;
+  if(run.lastMoveAt && t - run.lastMoveAt > 8000){
+    run.activeMs += performance.now() - run.resumedAt; run.autoPaused = true;
+    $("hint").textContent = "Auto-paused — start moving to resume"; say("Auto paused");
+  }
+}
+function resumeFromAuto(){
+  run.autoPaused = false; run.resumedAt = performance.now(); $("hint").textContent = ""; say("Resumed");
+}
+
+function checkSplit(){
+  const unit = M_PER();
+  while(run.dist - run.lastSplitDist >= unit){
+    // interpolate time at exact split distance
+    const target = run.lastSplitDist + unit;
+    const pts = run.pts; let tAt = elapsed();
+    for(let i = pts.length-1; i > 0; i--){
+      if(pts[i-1].d <= target && pts[i].d >= target){
+        const f = (target - pts[i-1].d) / Math.max(0.01, pts[i].d - pts[i-1].d);
+        tAt = pts[i-1].el + f*(pts[i].el - pts[i-1].el); break;
+      }
+    }
+    const splitMs = tAt - run.lastSplitMs;
+    run.splits.push(splitMs);
+    run.lastSplitMs = tAt; run.lastSplitDist = target;
+    const n = run.splits.length;
+    say(`${n} ${n===1?unitWord(1).toLowerCase():unitWord().toLowerCase()}. Time, ${spokenTime(tAt)}. Last split, ${spokenPace(splitMs/1000)}. Average pace, ${spokenPace(tAt/1000/(target/unit))}.`);
+  }
+}
+function spokenPace(sec){ const m = Math.floor(sec/60), s = Math.round(sec%60); return `${m} minute${m!==1?"s":""} ${s} second${s!==1?"s":""} per ${unitWord(1).toLowerCase()}`; }
+
+function currentPace(){
+  // rolling pace over last ~30s of movement
+  const pts = run.pts; if(pts.length < 2) return NaN;
+  const last = pts[pts.length-1]; let i = pts.length-2;
+  while(i > 0 && last.el - pts[i].el < 30000 && pts[i].seg === last.seg) i--;
+  const a = pts[i]; const dd = last.d - a.d, dt = (last.el - a.el)/1000;
+  if(dd < 5 || dt < 3) return NaN;
+  return dt / (dd / M_PER());
+}
+
+/* ---------- controls ---------- */
+function renderControls(){
+  const c = $("controls"); c.innerHTML = "";
+  if(run.state === "idle"){
+    const b = document.createElement("button"); b.className = "btn-round btn-go"; b.textContent = "START";
+    b.onclick = beginRun; c.appendChild(b);
+    $("hint").textContent = run.watchId!=null ? "" : "Tap Start — you'll be asked for location access";
+  } else if(run.state === "running"){
+    const b = document.createElement("button"); b.className = "btn-round btn-pause";
+    b.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`;
+    b.onclick = pauseRun; c.appendChild(b);
+    if(!run.autoPaused) $("hint").textContent = run.demo ? "Simulated run" : "";
+  } else if(run.state === "paused"){
+    const r = document.createElement("button"); r.className = "btn-round btn-go"; r.style.width = r.style.height = "96px"; r.style.fontSize = "16px"; r.textContent = "RESUME";
+    r.onclick = resumeRun;
+    const s = document.createElement("button"); s.className = "btn-round btn-stop"; s.innerHTML = `<div class="fill"></div><span>HOLD<br>TO END</span>`;
+    holdToEnd(s);
+    c.append(s, r);
+    $("hint").textContent = "Paused";
+  }
+}
+function holdToEnd(btn){
+  let raf = null, start = 0; const fill = btn.querySelector(".fill");
+  const step = now => { const p = Math.min(1, (now-start)/900); fill.style.transform = `scaleY(${p})`;
+    if(p >= 1){ cancel(); finishRun(); } else raf = requestAnimationFrame(step); };
+  const cancel = () => { cancelAnimationFrame(raf); raf = null; fill.style.transform = "scaleY(0)"; };
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); start = performance.now(); raf = requestAnimationFrame(step); });
+  ["pointerup","pointerleave","pointercancel"].forEach(ev => btn.addEventListener(ev, () => { if(raf) cancel(); }));
+  btn.addEventListener("contextmenu", e => e.preventDefault());
+}
+
+async function countdown(){
+  if(!settings.countdown) return;
+  const el = $("countdown"); el.classList.add("on");
+  for(const n of [3,2,1]){ el.textContent = n; await new Promise(r => setTimeout(r, 900)); }
+  el.classList.remove("on");
+}
+async function beginRun(){
+  startWatch();
+  try{ speechSynthesis && speechSynthesis.speak(new SpeechSynthesisUtterance("")); }catch(e){} // unlock audio on iOS
+  await countdown();
+  resetRun(); run.watchId = run.watchId; // keep watch
+  run.state = "running"; run.startedAt = Date.now(); run.resumedAt = performance.now();
+  if(lastFix && Date.now() - lastFix.t < 5000) addPoint(lastFix);
+  lockScreen(); say("Starting run"); renderControls();
+}
+function pauseRun(){
+  if(!run.autoPaused) run.activeMs += performance.now() - run.resumedAt;
+  run.autoPaused = false; run.state = "paused"; run.seg++;
+  say("Run paused"); renderControls();
+}
+function resumeRun(){
+  run.state = "running"; run.resumedAt = performance.now(); lockScreen(); say("Run resumed"); renderControls();
+}
+function finishRun(){
+  if(run.demo) stopDemo();
+  const total = run.activeMs;
+  if(run.dist < 20){
+    modal("Run too short", "Less than 20 meters recorded, so this run won't be saved.", [["OK", () => { resetRun(); stopWatchIfIdle(); renderControls(); tick(); }]]);
+    unlockScreen(); return;
+  }
+  const rec = { id: run.startedAt, start: run.startedAt, ms: total, dist: Math.round(run.dist*10)/10,
+    elev: Math.round(run.elevGain), splitsM: run.splits.slice(), splitUnit: settings.unit, demo: run.demo,
+    pts: run.pts.map(p => [p.lat, p.lon, Math.round(p.el/1000), p.seg, p.alt]) };
+  runs.unshift(rec);
+  const ok = saveRuns();
+  say(`Run complete. ${fmtDist(rec.dist)} ${unitWord().toLowerCase()} in ${spokenTime(total)}.`);
+  unlockScreen(); resetRun(); stopWatchIfIdle(); renderControls(); tick(); renderHistory();
+  openRun(rec.id);
+  if(!ok) modal("Couldn't save", "This browser blocked storage, so the run is shown but won't be kept after you close the page.", [["OK"]]);
+}
+function stopWatchIfIdle(){ /* keep GPS warm while on Run tab for quick restart */ }
+
+/* ---------- live render ---------- */
+function tick(){
+  const el = elapsed();
+  $("dist").textContent = fmtDist(run.dist);
+  $("time").textContent = fmtTime(el);
+  $("pace").textContent = run.state==="running" && !run.autoPaused ? fmtPace(currentPace()) : `--'--"`;
+  $("avg").textContent = run.dist > 30 ? fmtPace((el/1000)/(run.dist/M_PER())) : `--'--"`;
+  $("cal").textContent = kcal(run.dist);
+  $("elev").textContent = settings.unit==="mi" ? Math.round(run.elevGain*3.281) : Math.round(run.elevGain);
+  const inSplit = run.dist - run.lastSplitDist;
+  $("splitNow").textContent = run.dist > 30 && inSplit > 30 ? fmtPace(((el - run.lastSplitMs)/1000)/(inSplit/M_PER())) : "--";
+  if(document.getElementById("v-run").classList.contains("on")) drawRoute($("liveMap"), run.pts.map(p => [p.lat,p.lon,0,p.seg]), true);
+}
+setInterval(tick, 500);
+
+function drawRoute(cv, pts, live){
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if(!w || !h) return;
+  if(cv.width !== w*dpr){ cv.width = w*dpr; cv.height = h*dpr; }
+  const g = cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
+  // grid
+  g.strokeStyle = "rgba(255,255,255,.04)"; g.lineWidth = 1;
+  for(let x = 0; x < w; x += 24){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); }
+  for(let y = 0; y < h; y += 24){ g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
+  if(pts.length < 1){
+    if(live){ g.fillStyle = "#8e8e93"; g.font = "600 13px Inter, sans-serif"; g.textAlign = "center"; g.fillText(run.state==="idle" ? "Your route will appear here" : "Waiting for GPS…", w/2, h/2+4); }
+    return;
+  }
+  let minLat=Infinity,maxLat=-Infinity,minLon=Infinity,maxLon=-Infinity;
+  pts.forEach(p => { minLat=Math.min(minLat,p[0]); maxLat=Math.max(maxLat,p[0]); minLon=Math.min(minLon,p[1]); maxLon=Math.max(maxLon,p[1]); });
+  const k = Math.cos(toRad((minLat+maxLat)/2));
+  const spanX = Math.max((maxLon-minLon)*k, 0.0004), spanY = Math.max(maxLat-minLat, 0.0004);
+  const pad = Math.min(w,h) > 100 ? 22 : 8, sc = Math.min((w-2*pad)/spanX, (h-2*pad)/spanY);
+  const cx = (minLon+maxLon)/2, cy = (minLat+maxLat)/2;
+  const X = lon => w/2 + (lon-cx)*k*sc, Y = lat => h/2 - (lat-cy)*sc;
+  g.lineJoin = g.lineCap = "round"; g.lineWidth = Math.min(w,h) > 100 ? 4.5 : 2.5;
+  g.strokeStyle = "#d4ff3a"; g.shadowColor = "rgba(212,255,58,.5)"; g.shadowBlur = Math.min(w,h) > 100 ? 8 : 0;
+  g.beginPath(); let seg = null;
+  pts.forEach(p => { if(p[3] !== seg){ g.moveTo(X(p[1]),Y(p[0])); seg = p[3]; } else g.lineTo(X(p[1]),Y(p[0])); });
+  g.stroke(); g.shadowBlur = 0;
+  const r = Math.min(w,h) > 100 ? 6 : 3;
+  const s = pts[0], e = pts[pts.length-1];
+  g.fillStyle = "#30d158"; g.beginPath(); g.arc(X(s[1]),Y(s[0]),r,0,7); g.fill();
+  g.fillStyle = live ? "#fff" : "#ff453a"; g.beginPath(); g.arc(X(e[1]),Y(e[0]),r,0,7); g.fill();
+}
+
+/* ---------- demo (simulated run) ---------- */
+function startDemo(){
+  if(run.state !== "idle"){ return; }
+  showView("run");
+  $("gpsMsg").style.display = "none";
+  resetRun(); run.demo = true; run.state = "running"; run.startedAt = Date.now(); run.resumedAt = performance.now();
+  setGps("good", "Simulated GPS");
+  // loop around a park, ~3.2 m/s at 10x speed
+  let lat = 38.6270, lon = -90.1994, heading = 0, simT = Date.now();
+  run.demoTimer = setInterval(() => {
+    if(run.state !== "running") return;
+    // fast-forward: each tick = 10s of running
+    for(let i = 0; i < 10; i++){
+      heading += 0.02 + Math.sin(simT/40000)*0.03;
+      const v = 3.1 + Math.sin(simT/23000)*0.5;
+      lat += Math.cos(heading)*v/111320; lon += Math.sin(heading)*v/(111320*Math.cos(toRad(lat)));
+      simT += 1000; run.resumedAt -= 1000; // advance clock 1s
+      addPoint({lat, lon, acc:5, alt:150 + Math.sin(simT/60000)*12, t:simT});
+    }
+  }, 1000);
+  say("Starting simulated run"); renderControls();
+}
+function stopDemo(){ clearInterval(run.demoTimer); run.demoTimer = null; setGps("", "GPS idle"); }
+
+/* ---------- history ---------- */
+let period = "week";
+function periodStart(p){
+  const d = new Date(); d.setHours(0,0,0,0);
+  if(p==="week"){ const day = (d.getDay()+6)%7; d.setDate(d.getDate()-day); }
+  else if(p==="month") d.setDate(1);
+  else if(p==="year"){ d.setMonth(0,1); }
+  else return 0;
+  return d.getTime();
+}
+function renderHistory(){
+  const from = periodStart(period), list = runs.filter(r => r.start >= from);
+  const dist = list.reduce((a,r)=>a+r.dist,0), ms = list.reduce((a,r)=>a+r.ms,0);
+  $("totDist").textContent = (dist/M_PER()).toFixed(1);
+  $("totLbl").textContent = `${unitWord()} ${ {week:"this week",month:"this month",year:"this year",all:"all time"}[period] }`;
+  $("totRuns").textContent = list.length;
+  $("totPace").textContent = dist > 0 ? fmtPace((ms/1000)/(dist/M_PER())) : `--'--"`;
+  $("totTime").textContent = fmtTime(ms, ms>=3600000).replace(/^00:/,"0:");
+  const box = $("runList"); box.innerHTML = "";
+  if(!runs.length){ box.innerHTML = `<div class="empty">No runs yet.<br>Lace up and hit Start.</div>`; return; }
+  runs.slice(0,60).forEach(r => {
+    const b = document.createElement("button"); b.className = "runcard";
+    b.innerHTML = `<canvas></canvas><div style="flex:1;min-width:0"><div class="t">${dateStr(r.start)} · ${timeOfDay(r.start)} Run${r.demo?" (sim)":""}</div>
+      <div class="d">${fmtDist(r.dist)} <span style="font-size:14px;font-style:normal;color:var(--dim);font-weight:600">${settings.unit}</span></div>
+      <div class="s">${fmtPace((r.ms/1000)/(r.dist/M_PER()))} /${settings.unit} · ${fmtTime(r.ms)}</div></div>`;
+    b.onclick = () => openRun(r.id);
+    box.appendChild(b);
+    requestAnimationFrame(() => drawRoute(b.querySelector("canvas"), r.pts, false));
+  });
+}
+function computeSplits(r){
+  // recompute splits from points in current unit
+  const unit = M_PER(), out = []; let acc = 0, lastT = 0, next = unit, prev = null;
+  r.pts.forEach(p => {
+    if(prev && prev[3] === p[3]){
+      const d = hav({lat:prev[0],lon:prev[1]},{lat:p[0],lon:p[1]});
+      if(acc + d >= next){ const f = (next-acc)/d, t = prev[2] + f*(p[2]-prev[2]); out.push({ms:(t-lastT)*1000, full:true}); lastT = t; next += unit; }
+      acc += d;
+    }
+    prev = p;
+  });
+  const rem = r.dist - (next - unit);
+  if(rem > 30) out.push({ms: r.ms - lastT*1000, full:false, frac: rem/unit});
+  return out;
+}
+function openRun(id){
+  const r = runs.find(x => x.id === id); if(!r) return;
+  const sp = computeSplits(r);
+  const paces = sp.map(s => (s.ms/1000)/(s.full?1:s.frac));
+  const fastest = Math.min(...paces), slowest = Math.max(...paces);
+  $("sheetBody").innerHTML = `
+    <div class="sheet-top"><button class="btn-sm" id="closeSheet">‹ Back</button><button class="btn-sm danger" id="delRun">Delete</button></div>
+    <div style="color:var(--dim);font-weight:600;font-size:14px">${new Date(r.start).toLocaleString(undefined,{weekday:"long",month:"long",day:"numeric",hour:"numeric",minute:"2-digit"})}</div>
+    <div style="font-size:20px;font-weight:800;margin-top:2px">${timeOfDay(r.start)} Run${r.demo?" (simulated)":""}</div>
+    <div class="big" style="margin:18px 0 0;text-align:left"><div class="num" style="font-size:80px">${fmtDist(r.dist)}</div><div class="lbl">${unitWord()}</div></div>
+    <div class="stats" style="margin:18px 0">
+      <div class="stat"><div class="v">${fmtPace((r.ms/1000)/(r.dist/M_PER()))}</div><div class="l">Avg Pace</div></div>
+      <div class="stat"><div class="v">${fmtTime(r.ms)}</div><div class="l">Time</div></div>
+      <div class="stat"><div class="v">${kcal(r.dist)}</div><div class="l">Calories</div></div>
+    </div>
+    <canvas class="route" id="detailMap" style="height:240px"></canvas>
+    <div class="stats sm" style="margin:16px 0 0">
+      <div class="stat"><div class="v">${settings.unit==="mi"?Math.round(r.elev*3.281)+" ft":r.elev+" m"}</div><div class="l">Elev Gain</div></div>
+      <div class="stat"><div class="v">${paces.length?fmtPace(fastest):"--"}</div><div class="l">Fastest Split</div></div>
+      <div class="stat"><div class="v">${sp.length}</div><div class="l">Splits</div></div>
+    </div>
+    <div class="sec">Splits</div>
+    ${sp.length ? `<table><tr><th style="width:44px">${settings.unit==="mi"?"Mi":"Km"}</th><th style="width:80px">Pace</th><th></th></tr>
+      ${sp.map((s,i) => { const pc = paces[i]; const wpct = slowest===fastest?100: 45 + 55*(slowest-pc)/(slowest-fastest);
+        return `<tr><td>${s.full? i+1 : (s.frac).toFixed(2)}</td><td>${fmtPace(pc)}</td><td><div class="bar" style="width:${wpct}%;${pc===fastest&&sp.length>1?"":"opacity:.55"}"></div></td></tr>`; }).join("")}
+    </table>` : `<div class="empty" style="padding:16px">Run a full ${unitWord(1).toLowerCase()} to see splits.</div>`}
+    <button class="btn-wide" id="gpxBtn">Export GPX</button>
+    <div class="hint" id="gpxHint" style="margin-top:8px">Upload GPX to Strava, Garmin or Nike Run Club’s web partners</div>`;
+  $("sheet").classList.add("on"); $("sheet").scrollTop = 0;
+  requestAnimationFrame(() => drawRoute($("detailMap"), r.pts, false));
+  $("closeSheet").onclick = () => $("sheet").classList.remove("on");
+  $("delRun").onclick = () => modal("Delete this run?", "This can't be undone.", [["Cancel"], ["Delete", () => {
+    runs = runs.filter(x => x.id !== id); saveRuns(); $("sheet").classList.remove("on"); renderHistory(); }, "danger"]]);
+  $("gpxBtn").onclick = () => exportGpx(r);
+}
+function exportGpx(r){
+  const segs = {}; r.pts.forEach(p => (segs[p[3]] = segs[p[3]] || []).push(p));
+  const body = Object.values(segs).map(s => `<trkseg>${s.map(p => `<trkpt lat="${p[0]}" lon="${p[1]}">${p[4]!=null?`<ele>${p[4]}</ele>`:""}<time>${new Date(r.start + p[2]*1000).toISOString()}</time></trkpt>`).join("")}</trkseg>`).join("");
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Stride" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${timeOfDay(r.start)} Run</name><type>running</type>${body}</trk></gpx>`;
+  try{
+    const blob = new Blob([gpx], {type:"application/gpx+xml"}), a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `stride-${new Date(r.start).toISOString().slice(0,10)}.gpx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    $("gpxHint").textContent = "GPX file saved";
+  }catch(e){
+    copyText(gpx).then(ok => $("gpxHint").textContent = ok ? "Download blocked — GPX copied to clipboard instead" : "Export blocked on this page");
+  }
+}
+async function copyText(t){ try{ await navigator.clipboard.writeText(t); return true; }catch(e){ return false; } }
+
+/* ---------- navigation & settings ---------- */
+function showView(v){
+  document.querySelectorAll(".view").forEach(s => s.classList.toggle("on", s.id === "v-"+v));
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  if(v === "hist") renderHistory();
+  if(v === "run") tick();
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => showView(b.dataset.v));
+document.querySelectorAll("#periodSeg button").forEach(b => b.onclick = () => {
+  period = b.dataset.p; document.querySelectorAll("#periodSeg button").forEach(x => x.classList.toggle("on", x===b)); renderHistory(); });
+
+function applyUnit(){
+  $("unitPill").textContent = settings.unit;
+  $("distLbl").textContent = unitWord();
+  $("elevLbl").textContent = settings.unit==="mi" ? "Elev Gain (ft)" : "Elev Gain (m)";
+  $("splitLbl").textContent = settings.unit==="mi" ? "Current Mile" : "Current Km";
+  document.querySelectorAll("#unitSeg button").forEach(b => b.classList.toggle("on", b.dataset.u === settings.unit));
+  tick(); renderHistory();
+}
+document.querySelectorAll("#unitSeg button").forEach(b => b.onclick = () => {
+  if(run.state !== "idle"){ modal("Run in progress", "Change units after you finish this run.", [["OK"]]); return; }
+  settings.unit = b.dataset.u; saveSettings(); applyUnit(); });
+$("unitPill").onclick = () => { if(run.state==="idle"){ settings.unit = settings.unit==="mi"?"km":"mi"; saveSettings(); applyUnit(); } };
+[["tAudio","audio"],["tCount","countdown"],["tAuto","autopause"],["tWake","wake"]].forEach(([id,key]) => {
+  const t = $(id); t.classList.toggle("on", settings[key]);
+  t.onclick = () => { settings[key] = !settings[key]; t.classList.toggle("on", settings[key]); saveSettings(); };
+});
+$("weight").value = settings.weight;
+$("weight").onchange = e => { const v = +e.target.value; if(v >= 60 && v <= 500){ settings.weight = v; saveSettings(); tick(); } };
+$("demoBtn").onclick = startDemo;
+$("copyAll").onclick = async () => { const ok = await copyText(JSON.stringify(runs)); $("copyAll").textContent = ok ? "Copied" : "Blocked"; setTimeout(()=>$("copyAll").textContent="Copy",1500); };
+$("wipe").onclick = () => modal("Delete all runs?", `This removes ${runs.length} saved run${runs.length!==1?"s":""} from this device.`, [["Cancel"],["Delete all", () => { runs = []; saveRuns(); renderHistory(); }, "danger"]]);
+
+window.addEventListener("beforeunload", e => { if(run.state !== "idle" && !run.demo){ e.preventDefault(); e.returnValue = ""; } });
+
+applyUnit(); renderControls(); tick();
+})();
+</script>
+</body>
+</html>
