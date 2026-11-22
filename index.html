@@ -106,6 +106,14 @@
   .modal .acts{display:flex;gap:10px;margin-top:16px}.modal .acts button{flex:1}
   .countdown{position:fixed;inset:0;background:var(--accent);color:var(--accent-ink);display:none;align-items:center;justify-content:center;font-size:200px;font-weight:900;font-style:italic;z-index:40}
   .countdown.on{display:flex}
+  .pocket{position:fixed;inset:0;background:#000;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none}
+  .pocket.on{display:flex}
+  .pocket .pd{font-size:72px;font-weight:900;font-style:italic;color:#2a2a2a;letter-spacing:-2px;font-variant-numeric:tabular-nums}
+  .pocket .pt{font-size:22px;font-weight:700;color:#262626;margin-top:6px;font-variant-numeric:tabular-nums}
+  .pocket .track{position:absolute;bottom:calc(40px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:64px;height:190px;border-radius:32px;border:1px solid #1c1c1c}
+  .pocket .knob{position:absolute;bottom:6px;left:6px;width:50px;height:50px;border-radius:50%;background:#1e1e1e;display:flex;align-items:center;justify-content:center;color:#3a3a3a}
+  .pocket .ul{position:absolute;bottom:calc(14px + env(safe-area-inset-bottom));color:#2a2a2a;font-size:12px;font-weight:600}
+  .btn-pocket{display:block;margin:10px auto 0;background:var(--card2);border-radius:999px;padding:10px 18px;font-size:14px;font-weight:700}
 </style>
 </head>
 <body>
@@ -180,7 +188,7 @@
       <div class="row"><div>Try a simulated run<small>Preview the tracker without GPS</small></div><button class="btn-sm" id="demoBtn">Start</button></div>
       <div class="row"><div>Copy all runs (JSON)<small>Back up your history</small></div><button class="btn-sm" id="copyAll">Copy</button></div>
       <div class="row"><div>Delete all runs</div><button class="btn-sm danger" id="wipe">Delete</button></div>
-      <div class="msg">Runs are saved on this device in this browser. GPS only updates while this page is open and on screen, so keep “Keep screen on” enabled and the app in front during a run.</div>
+      <div class="msg">Runs are saved on this device in this browser. GPS only updates while this page is open and on screen, so keep “Keep screen on” enabled and the app in front during a run. Use 🌙 Pocket mode during a run to black out the screen, save battery and block pocket taps.</div>
     </section>
   </main>
 
@@ -196,6 +204,12 @@
 <!-- Modal -->
 <div class="modal" id="modal"><div class="box"><h3 id="mTitle" style="margin:0 0 6px"></h3><p id="mText"></p><div class="acts" id="mActs"></div></div></div>
 <div class="countdown" id="countdown">3</div>
+<div class="pocket" id="pocket">
+  <div class="pd" id="pDist">0.00</div>
+  <div class="pt" id="pTime">00:00</div>
+  <div class="track" id="pTrack"><div class="knob" id="pKnob"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></div></div>
+  <div class="ul">Slide up to unlock</div>
+</div>
 
 <script>
 (() => {
@@ -414,7 +428,43 @@ function renderControls(){
     c.append(s, r);
     $("hint").textContent = "Paused";
   }
+  if(run.state !== "idle"){
+    const p = document.createElement("button"); p.className = "btn-pocket"; p.textContent = "🌙 Pocket mode";
+    p.onclick = enterPocket;
+    const wrap = document.createElement("div"); wrap.style.flexBasis = "100%"; wrap.appendChild(p);
+    c.style.flexWrap = "wrap"; c.appendChild(wrap);
+  }
 }
+
+/* ---------- pocket mode ---------- */
+function enterPocket(){
+  $("pocket").classList.add("on"); updatePocket(); lockScreen();
+}
+function exitPocket(){ $("pocket").classList.remove("on"); }
+function updatePocket(){
+  if(!$("pocket").classList.contains("on")) return;
+  $("pDist").textContent = fmtDist(run.dist) + " " + settings.unit;
+  $("pTime").textContent = fmtTime(elapsed()) + (run.state === "paused" ? " · paused" : "");
+}
+(() => {
+  const knob = $("pKnob"), track = $("pTrack"), max = 190 - 62;
+  let startY = null, dy = 0;
+  // swallow every touch on the black screen except the knob
+  $("pocket").addEventListener("pointerdown", e => { if(e.target.closest("#pKnob")) return; e.preventDefault(); });
+  knob.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); startY = e.clientY; dy = 0; knob.setPointerCapture(e.pointerId); knob.style.transition = "none"; });
+  knob.addEventListener("pointermove", e => {
+    if(startY == null) return;
+    dy = Math.max(0, Math.min(max, startY - e.clientY));
+    knob.style.transform = `translateY(${-dy}px)`;
+  });
+  const end = () => {
+    if(startY == null) return; startY = null;
+    knob.style.transition = "transform .2s"; knob.style.transform = "translateY(0)";
+    if(dy >= max - 6) exitPocket();
+  };
+  knob.addEventListener("pointerup", end); knob.addEventListener("pointercancel", end);
+  ["touchstart","touchmove","gesturestart","contextmenu"].forEach(ev => $("pocket").addEventListener(ev, e => { if(!e.target.closest("#pKnob") || ev!=="touchstart") e.preventDefault(); }, {passive:false}));
+})();
 function holdToEnd(btn){
   let raf = null, start = 0; const fill = btn.querySelector(".fill");
   const step = now => { const p = Math.min(1, (now-start)/900); fill.style.transform = `scaleY(${p})`;
@@ -449,6 +499,7 @@ function resumeRun(){
   run.state = "running"; run.resumedAt = performance.now(); lockScreen(); say("Run resumed"); renderControls();
 }
 function finishRun(){
+  exitPocket();
   if(run.demo) stopDemo();
   const total = run.activeMs;
   if(run.dist < 20){
@@ -478,6 +529,7 @@ function tick(){
   $("elev").textContent = settings.unit==="mi" ? Math.round(run.elevGain*3.281) : Math.round(run.elevGain);
   const inSplit = run.dist - run.lastSplitDist;
   $("splitNow").textContent = run.dist > 30 && inSplit > 30 ? fmtPace(((el - run.lastSplitMs)/1000)/(inSplit/M_PER())) : "--";
+  updatePocket();
   if(document.getElementById("v-run").classList.contains("on")) drawRoute($("liveMap"), run.pts.map(p => [p.lat,p.lon,0,p.seg]), true);
 }
 setInterval(tick, 500);
