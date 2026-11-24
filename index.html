@@ -98,6 +98,8 @@
   .sheet-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
   .btn-sm{background:var(--card2);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:700}
   .btn-sm.danger{color:var(--red)}
+  .gps-on{background:#30d158 !important;color:#0b0b0c !important}
+  .gps-off{background:var(--red) !important;color:#fff !important}
   .btn-wide{display:block;width:100%;background:var(--accent);color:var(--accent-ink);font-weight:900;font-size:16px;padding:16px;border-radius:14px;margin-top:18px}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:30;padding:20px}
   .modal.on{display:flex}
@@ -238,7 +240,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem("stride_"+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem("stride_"+k, JSON.stringify(v)); return true; }catch(e){ return false; } }
 };
-const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170, heightIn:null, age:null, sex:"", mode:"gps", strideCal:1}, store.get("settings", {}));
+const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170, heightIn:null, age:null, sex:"", mode:"gps", strideCal:1, gpsOn:true}, store.get("settings", {}));
 let runs = store.get("runs", []);
 const saveSettings = () => store.set("settings", settings);
 const saveRuns = () => store.set("runs", runs);
@@ -358,10 +360,16 @@ function updateGpsToggle(){
   b.style.display = run.state === "idle" && !run.demo && settings.mode === "gps" ? "" : "none";
   $("modeSeg").style.display = run.state === "idle" && !run.demo ? "" : "none";
   document.querySelectorAll("#modeSeg button").forEach(x => x.classList.toggle("on", x.dataset.m === settings.mode));
-  b.textContent = run.watchId != null ? "Turn off GPS" : "Turn on GPS";
+  const on = run.watchId != null;
+  b.textContent = on ? "GPS On" : "GPS Off";
+  b.classList.toggle("gps-on", on); b.classList.toggle("gps-off", !on);
+  b.setAttribute("aria-label", on ? "GPS is on, tap to turn off" : "GPS is off, tap to turn on");
 }
 function onGpsErr(err){
-  if(err.code === 1) gpsFail("Location permission was denied or is blocked on this page.");
+  if(err.code === 1){
+    if(run.watchId != null){ try{ navigator.geolocation.clearWatch(run.watchId); }catch(e){} run.watchId = null; }
+    gpsFail("Location permission was denied or is blocked on this page."); updateGpsToggle();
+  }
   else if(err.code === 3) setGps("bad", "GPS timeout — searching…");
   else setGps("bad", "GPS unavailable — searching…");
 }
@@ -640,7 +648,7 @@ function downsample(arr){
     if(t - lastT >= 5 || p.seg !== lastSeg || i === arr.length-1){ out.push([t, Math.round(p.d*10)/10, p.seg]); lastT = t; lastSeg = p.seg; } });
   return out;
 }
-function stopWatchIfIdle(){ if(run.state === "idle") stopWatch(); }  // GPS off after a run to save battery
+function stopWatchIfIdle(){ if(run.state === "idle" && !settings.gpsOn) stopWatch(); }  // GPS off after a run to save battery
 
 /* ---------- live render ---------- */
 function tick(){
@@ -892,7 +900,7 @@ document.querySelectorAll("#modeSeg button").forEach(b => b.onclick = () => {
   if(run.state !== "idle") return;
   settings.mode = b.dataset.m; saveSettings();
   if(settings.mode === "indoor"){ stopWatch(); setGps("", "Indoor · GPS off"); }
-  else setGps("", "GPS off");
+  else if(settings.gpsOn) startWatch(); else setGps("", "GPS off");
   renderControls(); tick();
 });
 function calText(){ $("calTxt").textContent = `Stride set to ${Math.round((settings.strideCal||1)*100)}% · adjusts when you correct distance`; }
@@ -919,13 +927,20 @@ $("aSave").onclick = () => {
   $("addModal").classList.remove("on"); renderHistory();
   if(!ok) modal("Couldn't save", "This browser blocked storage.", [["OK"]]);
 };
-$("gpsToggle").onclick = () => { if(run.state !== "idle") return; run.watchId != null ? stopWatch() : startWatch(); };
+$("gpsToggle").onclick = () => {
+  if(run.state !== "idle") return;
+  if(run.watchId != null){ settings.gpsOn = false; stopWatch(); } else { settings.gpsOn = true; startWatch(); }
+  saveSettings();
+};
 $("copyAll").onclick = async () => { const ok = await copyText(JSON.stringify(runs)); $("copyAll").textContent = ok ? "Copied" : "Blocked"; setTimeout(()=>$("copyAll").textContent="Copy",1500); };
 $("wipe").onclick = () => modal("Delete all runs?", `This removes ${runs.length} saved run${runs.length!==1?"s":""} from this device.`, [["Cancel"],["Delete all", () => { runs = []; saveRuns(); renderHistory(); }, "danger"]]);
 
 window.addEventListener("beforeunload", e => { if(run.state !== "idle" && !run.demo){ e.preventDefault(); e.returnValue = ""; } });
 
-applyUnit(); if(settings.mode === "indoor") setGps("", "Indoor · GPS off"); renderControls(); tick();
+applyUnit();
+if(settings.mode === "indoor") setGps("", "Indoor · GPS off");
+else if(settings.gpsOn) startWatch();       // remember the user's GPS choice between visits
+renderControls(); tick();
 })();
 </script>
 </body>
