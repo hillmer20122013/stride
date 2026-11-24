@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0b0c">
+<meta name="theme-color" content="#0a1730">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Stride">
@@ -12,8 +12,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0b0b0c; --card:#161618; --card2:#1f1f22; --line:#2a2a2e;
-    --text:#f5f5f7; --dim:#8e8e93; --accent:#d4ff3a; --accent-ink:#0b0b0c;
+    --bg:#0a1730; --card:#13294b; --card2:#1c3661; --line:#29467a;
+    --text:#f5f7fb; --dim:#9aabc8; --accent:#ff5f05; --accent-ink:#ffffff;
     --red:#ff453a; --orange:#ff9f0a;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -28,7 +28,7 @@
   .pill{background:var(--card2);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--dim)}
   main{flex:1;padding:8px 18px 100px}
   nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;
-    background:rgba(11,11,12,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);
+    background:rgba(10,23,48,.94);backdrop-filter:blur(12px);border-top:1px solid var(--line);
     padding-bottom:env(safe-area-inset-bottom);z-index:5}
   nav .inner{display:flex;max-width:520px;width:100%}
   nav button{flex:1;padding:12px 0 14px;font-size:12px;font-weight:600;color:var(--dim);display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -48,11 +48,13 @@
   .stat .v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
   .stat .l{font-size:12px;color:var(--dim);font-weight:600;margin-top:2px}
   .stats.sm .v{font-size:19px}
+  .totals .stat .l{color:rgba(255,255,255,.8)}
+  select{background:var(--card2);border:0;color:var(--text);font:inherit;font-size:14px;padding:8px;border-radius:8px;max-width:170px}
   canvas.route{width:100%;height:190px;background:var(--card);border-radius:18px;display:block}
   .controls{display:flex;justify-content:center;align-items:center;gap:22px;margin:24px 0 8px}
   .btn-round{width:96px;height:96px;border-radius:50%;font-weight:900;font-size:17px;letter-spacing:.5px;display:flex;align-items:center;justify-content:center;position:relative}
-  .btn-go{background:var(--accent);color:var(--accent-ink);width:132px;height:132px;font-size:24px;font-style:italic;box-shadow:0 0 40px rgba(212,255,58,.25)}
-  .btn-pause{background:var(--text);color:var(--bg)}
+  .btn-go{background:var(--accent);color:var(--accent-ink);width:132px;height:132px;font-size:24px;font-style:italic;box-shadow:0 0 40px rgba(255,95,5,.35)}
+  .btn-pause{background:var(--text);color:#13294b}
   .btn-stop{background:var(--card2);color:var(--text);overflow:hidden}
   .btn-stop .fill{position:absolute;inset:0;background:var(--red);transform:scaleY(0);transform-origin:bottom;border-radius:50%}
   .btn-stop span{position:relative;font-size:13px;line-height:1.15}
@@ -70,11 +72,11 @@
   .bar{height:8px;border-radius:4px;background:var(--accent)}
 
   /* HISTORY */
-  .totals{background:linear-gradient(135deg,#1c1f10,#161618);border:1px solid #2c3315;border-radius:20px;padding:18px;margin-top:8px}
+  .totals{background:linear-gradient(135deg,#ff5f05 0%,#c94a00 55%,#13294b 100%);border:1px solid #ff7a33;border-radius:20px;padding:18px;margin-top:8px}
   .totals .tnum{font-size:54px;font-weight:900;font-style:italic;letter-spacing:-2px;line-height:1}
   .seg{display:flex;background:var(--card2);border-radius:10px;padding:3px;margin-bottom:14px}
   .seg button{flex:1;padding:7px 0;border-radius:8px;font-size:13px;font-weight:700;color:var(--dim)}
-  .seg button.on{background:var(--text);color:var(--bg)}
+  .seg button.on{background:var(--accent);color:var(--accent-ink)}
   .runcard{display:flex;gap:14px;align-items:center;background:var(--card);border-radius:16px;padding:12px;margin-bottom:10px;width:100%;text-align:left}
   .runcard canvas{width:64px;height:64px;border-radius:12px;background:var(--card2);flex:none}
   .runcard .t{font-size:13px;color:var(--dim);font-weight:600}
@@ -158,7 +160,7 @@
       </div>
       <div class="totals">
         <div class="tnum" id="totDist">0.0</div>
-        <div style="color:var(--dim);font-weight:600;font-size:14px;margin-top:4px" id="totLbl">Miles this week</div>
+        <div style="color:rgba(255,255,255,.85);font-weight:600;font-size:14px;margin-top:4px" id="totLbl">Miles this week</div>
         <div class="stats sm" style="margin:16px 0 0">
           <div class="stat"><div class="v" id="totRuns">0</div><div class="l">Runs</div></div>
           <div class="stat"><div class="v" id="totPace">--'--"</div><div class="l">Avg Pace</div></div>
@@ -174,7 +176,11 @@
       <div class="sec" style="margin-top:6px">Preferences</div>
       <div class="row"><div>Units</div>
         <div class="seg small" id="unitSeg"><button data-u="mi">Miles</button><button data-u="km">Km</button></div></div>
-      <div class="row"><div>Audio feedback<small>Spoken split every mile/km</small></div><button class="toggle" id="tAudio"></button></div>
+      <div class="row"><div>Mile callouts<small>Narrator announces every mile/km</small></div><button class="toggle" id="tAudio"></button></div>
+      <div class="row"><div>Narrator voice</div><select id="voiceSel"><option value="">Auto</option></select></div>
+      <div class="row"><div>Voice style</div><div class="seg small" id="styleSeg" style="width:150px"><button data-s="normal">Normal</button><button data-s="smooth">Smooth</button></div></div>
+      <div class="row"><div>Hear the narrator</div><button class="btn-sm" id="voiceTest">▶ Test</button></div>
+      <div class="hint" id="voiceHint" style="text-align:left;margin:-2px 4px 8px"></div>
       <div class="row"><div>3-second countdown</div><button class="toggle" id="tCount"></button></div>
       <div class="row"><div>Auto-pause<small>Pauses when you stop moving</small></div><button class="toggle" id="tAuto"></button></div>
       <div class="row"><div>Keep screen on<small>Needed for GPS in a browser</small></div><button class="toggle" id="tWake"></button></div>
@@ -240,7 +246,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem("stride_"+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem("stride_"+k, JSON.stringify(v)); return true; }catch(e){ return false; } }
 };
-const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170, heightIn:null, age:null, sex:"", mode:"gps", strideCal:1, gpsOn:true}, store.get("settings", {}));
+const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170, heightIn:null, age:null, sex:"", mode:"gps", strideCal:1, gpsOn:true, voice:"", voiceStyle:"smooth"}, store.get("settings", {}));
 let runs = store.get("runs", []);
 const saveSettings = () => store.set("settings", settings);
 const saveRuns = () => store.set("runs", runs);
@@ -299,9 +305,40 @@ function modal(title, text, actions){
 }
 
 /* ---------- speech ---------- */
-function say(text){
-  if(!settings.audio) return;
-  try{ const u = new SpeechSynthesisUtterance(text); u.rate = 1; speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){}
+let voices = [];
+function loadVoices(){
+  try{ voices = speechSynthesis.getVoices().filter(v => /^en[-_]/i.test(v.lang)); }catch(e){ voices = []; }
+  renderVoiceSelect();
+}
+try{ speechSynthesis.onvoiceschanged = loadVoices; }catch(e){}
+function pickVoice(){
+  if(settings.voice){ const v = voices.find(v => v.voiceURI === settings.voice); if(v) return v; }
+  // default narrator: English (India) female, then British English female
+  const inF = voices.filter(v => /en[-_]IN/i.test(v.lang));
+  return inF.find(v => /veena|isha|lekha|female/i.test(v.name)) || inF.find(v => !/rishi|male/i.test(v.name)) || inF[0]
+    || voices.find(v => /en[-_]GB/i.test(v.lang) && /kate|serena|stephanie|martha|female/i.test(v.name))
+    || voices.find(v => /en[-_]GB/i.test(v.lang)) || null;
+}
+function say(text, force){
+  if(!settings.audio && !force) return;
+  try{
+    const u = new SpeechSynthesisUtterance(text), v = pickVoice();
+    if(v){ u.voice = v; u.lang = v.lang; } else u.lang = "en-IN";
+    const smooth = settings.voiceStyle === "smooth";
+    u.rate = smooth ? 0.9 : 1; u.pitch = smooth ? 0.9 : 1;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }catch(e){}
+}
+function renderVoiceSelect(){
+  const sel = document.getElementById("voiceSel"); if(!sel) return;
+  const auto = pickVoice();
+  sel.innerHTML = `<option value="">Auto${auto ? " (" + auto.name + ")" : ""}</option>` +
+    voices.slice().sort((a,b) => (/IN/.test(b.lang) - /IN/.test(a.lang)) || a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name))
+      .map(v => `<option value="${v.voiceURI.replace(/"/g,"&quot;")}">${v.name} · ${v.lang.replace("_","-")}</option>`).join("");
+  sel.value = voices.some(v => v.voiceURI === settings.voice) ? settings.voice : "";
+  const hasIN = voices.some(v => /en[-_]IN/i.test(v.lang));
+  document.getElementById("voiceHint").textContent = hasIN ? "" :
+    "No English (India) voice installed yet. iPhone Settings → Accessibility → Spoken Content → Voices → English → English (India) → download Veena.";
 }
 function spokenTime(ms){
   const s = Math.round(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = s%60;
@@ -697,7 +734,7 @@ function drawRoute(cv, pts, live, label){
   const cx = (minLon+maxLon)/2, cy = (minLat+maxLat)/2;
   const X = lon => w/2 + (lon-cx)*k*sc, Y = lat => h/2 - (lat-cy)*sc;
   g.lineJoin = g.lineCap = "round"; g.lineWidth = Math.min(w,h) > 100 ? 4.5 : 2.5;
-  g.strokeStyle = "#d4ff3a"; g.shadowColor = "rgba(212,255,58,.5)"; g.shadowBlur = Math.min(w,h) > 100 ? 8 : 0;
+  g.strokeStyle = "#ff5f05"; g.shadowColor = "rgba(255,95,5,.55)"; g.shadowBlur = Math.min(w,h) > 100 ? 8 : 0;
   g.beginPath(); let seg = null;
   pts.forEach(p => { if(p[3] !== seg){ g.moveTo(X(p[1]),Y(p[0])); seg = p[3]; } else g.lineTo(X(p[1]),Y(p[0])); });
   g.stroke(); g.shadowBlur = 0;
@@ -896,6 +933,17 @@ $("saveProfile").onclick = () => {
 };
 loadProfile();
 $("demoBtn").onclick = startDemo;
+$("voiceSel").onchange = e => { settings.voice = e.target.value; saveSettings(); say("Hello. I'll be your narrator today.", true); };
+document.querySelectorAll("#styleSeg button").forEach(b => {
+  b.classList.toggle("on", b.dataset.s === settings.voiceStyle);
+  b.onclick = () => { settings.voiceStyle = b.dataset.s; saveSettings();
+    document.querySelectorAll("#styleSeg button").forEach(x => x.classList.toggle("on", x === b)); };
+});
+$("voiceTest").onclick = () => {
+  const u = settings.unit === "mi" ? "mile" : "kilometer";
+  say(`1 ${u}. Time, 9 minutes 32 seconds. Last split, 9 minutes 32 seconds per ${u}. Lovely pace. Keep it going.`, true);
+};
+loadVoices();
 document.querySelectorAll("#modeSeg button").forEach(b => b.onclick = () => {
   if(run.state !== "idle") return;
   settings.mode = b.dataset.m; saveSettings();
