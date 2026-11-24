@@ -128,6 +128,7 @@
     <section class="view on" id="v-run">
       <div class="gps"><div class="dot" id="gpsDot"></div><span id="gpsText">GPS off</span>
         <button class="btn-sm" id="gpsToggle" style="margin-left:auto;font-size:13px;padding:7px 13px">Turn on GPS</button></div>
+      <div class="seg" id="modeSeg" style="margin:8px 0 0"><button data-m="gps">Outdoor · GPS</button><button data-m="indoor">Indoor · No GPS</button></div>
       <div class="big">
         <div class="num" id="dist">0.00</div>
         <div class="lbl" id="distLbl">Miles</div>
@@ -162,7 +163,7 @@
           <div class="stat"><div class="v" id="totTime">0:00</div><div class="l">Time</div></div>
         </div>
       </div>
-      <div class="sec">Recent Runs</div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="sec">Recent Runs</div><button class="btn-sm" id="addRunBtn" style="font-size:13px">+ Add run</button></div>
       <div id="runList"></div>
     </section>
 
@@ -185,6 +186,7 @@
         <div class="seg small" id="sexSeg"><button data-s="male">Male</button><button data-s="female">Female</button></div></div>
       <button class="btn-wide" id="saveProfile" style="margin-top:6px">Save Profile</button>
       <div class="hint" id="profHint" style="margin-top:8px"></div>
+      <div class="row"><div>Indoor stride calibration<small id="calTxt">Adjusts automatically when you correct distance</small></div><button class="btn-sm" id="calReset">Reset</button></div>
       <div class="sec">Data</div>
       <div class="row"><div>Try a simulated run<small>Preview the tracker without GPS</small></div><button class="btn-sm" id="demoBtn">Start</button></div>
       <div class="row"><div>Copy all runs (JSON)<small>Back up your history</small></div><button class="btn-sm" id="copyAll">Copy</button></div>
@@ -205,6 +207,22 @@
 <!-- Modal -->
 <div class="modal" id="modal"><div class="box"><h3 id="mTitle" style="margin:0 0 6px"></h3><p id="mText"></p><div class="acts" id="mActs"></div></div></div>
 <div class="countdown" id="countdown">3</div>
+<div class="modal" id="distModal"><div class="box">
+  <h3 style="margin:0 0 6px">Confirm distance</h3>
+  <p id="distTxt">Distance was estimated from your steps. If you ran on a treadmill, enter what its display shows — Stride learns your stride from it.</p>
+  <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px">
+    <input type="number" inputmode="decimal" step="0.01" id="distIn" style="width:120px;font-size:24px;font-weight:800"><span id="distUnit" style="color:var(--dim);font-weight:700">mi</span></div>
+  <div class="acts"><button class="btn-sm danger" id="distDiscard">Discard</button><button class="btn-sm" id="distSave" style="background:var(--accent);color:var(--accent-ink)">Save Run</button></div>
+</div></div>
+<div class="modal" id="addModal"><div class="box" style="text-align:left">
+  <h3 style="margin:0 0 12px;text-align:center">Add a run</h3>
+  <div class="row" style="background:var(--card2)"><div>Date</div><input type="date" id="aDate" style="background:var(--card);border:0;color:var(--text);font:inherit;padding:6px;border-radius:8px"></div>
+  <div class="row" style="background:var(--card2)"><div>Start time</div><input type="time" id="aTime" style="background:var(--card);border:0;color:var(--text);font:inherit;padding:6px;border-radius:8px"></div>
+  <div class="row" style="background:var(--card2)"><div>Distance (<span id="aUnit">mi</span>)</div><input type="number" inputmode="decimal" step="0.01" id="aDist" placeholder="0.00"></div>
+  <div class="row" style="background:var(--card2)"><div>Time</div><div style="display:flex;gap:4px;align-items:center">
+    <input type="number" inputmode="numeric" id="aH" placeholder="h" style="width:44px">:<input type="number" inputmode="numeric" id="aM" placeholder="m" style="width:50px">:<input type="number" inputmode="numeric" id="aS" placeholder="s" style="width:50px"></div></div>
+  <div class="acts"><button class="btn-sm" id="aCancel">Cancel</button><button class="btn-sm" id="aSave" style="background:var(--accent);color:var(--accent-ink)">Save</button></div>
+</div></div>
 <div class="pocket" id="pocket">
   <div class="pd" id="pDist">0.00</div>
   <div class="pt" id="pTime">00:00</div>
@@ -220,7 +238,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem("stride_"+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem("stride_"+k, JSON.stringify(v)); return true; }catch(e){ return false; } }
 };
-const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170, heightIn:null, age:null, sex:""}, store.get("settings", {}));
+const settings = Object.assign({unit:"mi", audio:true, countdown:true, autopause:false, wake:true, weight:170, heightIn:null, age:null, sex:"", mode:"gps", strideCal:1}, store.get("settings", {}));
 let runs = store.get("runs", []);
 const saveSettings = () => store.set("settings", settings);
 const saveRuns = () => store.set("runs", runs);
@@ -300,12 +318,13 @@ document.addEventListener("visibilitychange", () => { if(document.visibilityStat
 /* ---------- run state ---------- */
 const run = { state:"idle", startedAt:0, activeMs:0, resumedAt:0, dist:0, pts:[], seg:0,
   splits:[], lastSplitMs:0, lastSplitDist:0, elevGain:0, lastAlt:null, watchId:null, demo:false, demoTimer:null,
-  lastMoveAt:0, autoPaused:false };
+  lastMoveAt:0, autoPaused:false, indoor:false, steps:0, samples:[], stepTimes:[], lastStepAt:0, motionSeen:false };
 const elapsed = () => run.activeMs + (run.state==="running" && !run.autoPaused ? performance.now()-run.resumedAt : 0);
 
 function resetRun(){
   Object.assign(run, { state:"idle", startedAt:0, activeMs:0, resumedAt:0, dist:0, pts:[], seg:0, splits:[],
-    lastSplitMs:0, lastSplitDist:0, elevGain:0, lastAlt:null, demo:false, lastMoveAt:0, autoPaused:false });
+    lastSplitMs:0, lastSplitDist:0, elevGain:0, lastAlt:null, demo:false, lastMoveAt:0, autoPaused:false,
+    indoor:false, steps:0, samples:[], stepTimes:[], lastStepAt:0, motionSeen:false });
 }
 
 /* ---------- GPS ---------- */
@@ -336,7 +355,9 @@ function stopWatch(){
 function updateGpsToggle(){
   const b = $("gpsToggle");
   // GPS can't be switched off mid-run (it would stop distance tracking)
-  b.style.display = run.state === "idle" && !run.demo ? "" : "none";
+  b.style.display = run.state === "idle" && !run.demo && settings.mode === "gps" ? "" : "none";
+  $("modeSeg").style.display = run.state === "idle" && !run.demo ? "" : "none";
+  document.querySelectorAll("#modeSeg button").forEach(x => x.classList.toggle("on", x.dataset.m === settings.mode));
   b.textContent = run.watchId != null ? "Turn off GPS" : "Turn on GPS";
 }
 function onGpsErr(err){
@@ -395,7 +416,7 @@ function checkSplit(){
   while(run.dist - run.lastSplitDist >= unit){
     // interpolate time at exact split distance
     const target = run.lastSplitDist + unit;
-    const pts = run.pts; let tAt = elapsed();
+    const pts = track(); let tAt = elapsed();
     for(let i = pts.length-1; i > 0; i--){
       if(pts[i-1].d <= target && pts[i].d >= target){
         const f = (target - pts[i-1].d) / Math.max(0.01, pts[i].d - pts[i-1].d);
@@ -413,12 +434,64 @@ function spokenPace(sec){ const m = Math.floor(sec/60), s = Math.round(sec%60); 
 
 function currentPace(){
   // rolling pace over last ~30s of movement
-  const pts = run.pts; if(pts.length < 2) return NaN;
+  const pts = track(); if(pts.length < 2) return NaN;
   const last = pts[pts.length-1]; let i = pts.length-2;
   while(i > 0 && last.el - pts[i].el < 30000 && pts[i].seg === last.seg) i--;
   const a = pts[i]; const dd = last.d - a.d, dt = (last.el - a.el)/1000;
   if(dd < 5 || dt < 3) return NaN;
   return dt / (dd / M_PER());
+}
+
+/* ---------- indoor: step counting (no GPS) ---------- */
+const track = () => run.indoor ? run.samples : run.pts;
+let motionOn = false, smv = 9.8, prevSm = 9.8, rising = false, avgM = 9.8, lastPeak = 0;
+function onMotion(e){
+  const a = e.accelerationIncludingGravity; if(!a || a.x == null) return;
+  run.motionSeen = true;
+  const m = Math.hypot(a.x, a.y, a.z);
+  smv = smv*0.6 + m*0.4;                 // smooth sensor noise
+  avgM = avgM*0.98 + smv*0.02;           // running baseline (~gravity)
+  const t = performance.now();
+  if(rising && smv < prevSm && prevSm > avgM + 1.8 && t - lastPeak > 250){ lastPeak = t; onStep(t); }
+  rising = smv > prevSm; prevSm = smv;
+}
+function cadence(){
+  const ts = run.stepTimes; if(ts.length < 4) return 0;
+  const span = (ts[ts.length-1] - ts[0])/1000; return span > 2 ? Math.round((ts.length-1)/span*60) : 0;
+}
+function stepLength(cad){
+  // step length as a share of height rises with cadence (walking ≈ 0.41, easy run ≈ 0.55, fast ≈ 0.72)
+  const h = (settings.heightIn || 70) * 0.0254;
+  let f; if(!cad || cad < 140) f = 0.41; else if(cad < 160) f = 0.41 + (cad-140)*0.007; else if(cad < 185) f = 0.55 + (cad-160)*0.0068; else f = 0.72;
+  return h * f * (settings.strideCal || 1);
+}
+function onStep(t){
+  if(run.state !== "running" || !run.indoor) return;
+  if(run.autoPaused) resumeFromAuto();
+  run.steps++; run.lastStepAt = t;
+  run.stepTimes.push(t); while(run.stepTimes.length && t - run.stepTimes[0] > 10000) run.stepTimes.shift();
+  run.dist += stepLength(cadence());
+  run.samples.push({ el: elapsed(), d: run.dist, seg: run.seg });
+  checkSplit();
+}
+function startMotion(){
+  const go = () => {
+    if(!motionOn){ window.addEventListener("devicemotion", onMotion); motionOn = true; }
+    setGps("good", "Indoor · counting steps");
+    setTimeout(() => { if(run.indoor && run.state !== "idle" && !run.motionSeen) motionFail("No motion sensor data is coming in."); }, 5000);
+  };
+  try{
+    if(typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function"){
+      DeviceMotionEvent.requestPermission().then(r => r === "granted" ? go() : motionFail("Motion & Fitness access was denied."))
+        .catch(() => motionFail("Motion access isn't available on this page."));
+    } else go();
+  }catch(e){ motionFail("Motion access isn't available on this page."); }
+}
+function stopMotion(){ if(motionOn){ window.removeEventListener("devicemotion", onMotion); motionOn = false; } }
+function motionFail(reason){
+  setGps("bad", "Steps unavailable");
+  const m = $("gpsMsg"); m.style.display = "block";
+  m.innerHTML = `<b>${reason}</b><br>The timer keeps running — you'll enter your distance when you finish. To allow it: iPhone Settings → Apps → Safari → turn on Motion & Orientation Access, then reload.`;
 }
 
 /* ---------- controls ---------- */
@@ -428,7 +501,8 @@ function renderControls(){
   if(run.state === "idle"){
     const b = document.createElement("button"); b.className = "btn-round btn-go"; b.textContent = "START";
     b.onclick = beginRun; c.appendChild(b);
-    $("hint").textContent = run.watchId!=null ? "" : "Tap Start — you'll be asked for location access";
+    $("hint").textContent = settings.mode === "indoor" ? "Indoor: distance from your steps — keep your phone on you"
+      : run.watchId!=null ? "" : "Tap Start — you'll be asked for location access";
   } else if(run.state === "running"){
     const b = document.createElement("button"); b.className = "btn-round btn-pause";
     b.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`;
@@ -496,12 +570,14 @@ async function countdown(){
   el.classList.remove("on");
 }
 async function beginRun(){
-  startWatch();
+  const indoor = settings.mode === "indoor";
+  if(indoor){ stopWatch(); startMotion(); } else startWatch();
   try{ speechSynthesis && speechSynthesis.speak(new SpeechSynthesisUtterance("")); }catch(e){} // unlock audio on iOS
   await countdown();
   resetRun(); run.watchId = run.watchId; // keep watch
-  run.state = "running"; run.startedAt = Date.now(); run.resumedAt = performance.now();
-  if(lastFix && Date.now() - lastFix.t < 5000) addPoint(lastFix);
+  run.state = "running"; run.startedAt = Date.now(); run.resumedAt = performance.now(); run.indoor = indoor;
+  if(indoor){ setGps("good", "Indoor · counting steps"); }
+  else if(lastFix && Date.now() - lastFix.t < 5000) addPoint(lastFix);
   lockScreen(); say("Starting run"); renderControls();
 }
 function pauseRun(){
@@ -515,6 +591,33 @@ function resumeRun(){
 function finishRun(){
   exitPocket();
   if(run.demo) stopDemo();
+  if(run.indoor){ stopMotion(); askDistance(); return; }
+  commitRun();
+}
+function askDistance(){
+  $("distUnit").textContent = settings.unit;
+  $("distIn").value = run.dist > 0 ? fmtDist(run.dist) : "";
+  $("distTxt").textContent = run.steps > 0
+    ? `${run.steps.toLocaleString()} steps counted. If you ran on a treadmill, enter what its display shows — Stride learns your stride from it.`
+    : "Steps couldn't be counted on this run. Enter the distance you ran.";
+  $("distModal").classList.add("on");
+}
+$("distSave").onclick = () => {
+  const v = parseFloat($("distIn").value);
+  if(!(v > 0 && v < 200)){ $("distIn").focus(); return; }
+  const actual = v * M_PER();
+  if(run.steps > 200 && run.dist > 200 && Math.abs(actual - run.dist) > 1){
+    const ratio = actual / run.dist;
+    settings.strideCal = Math.max(0.5, Math.min(2, (settings.strideCal||1) * ratio)); saveSettings(); calText();
+    run.samples.forEach(p => p.d *= ratio);
+  }
+  run.dist = actual;
+  $("distModal").classList.remove("on");
+  commitRun();
+};
+$("distDiscard").onclick = () => { $("distModal").classList.remove("on");
+  modal("Discard this run?", "It won't be saved.", [["Keep", askDistance], ["Discard", () => { resetRun(); renderControls(); tick(); unlockScreen(); }, "danger"]]); };
+function commitRun(){
   const total = run.activeMs;
   if(run.dist < 20){
     modal("Run too short", "Less than 20 meters recorded, so this run won't be saved.", [["OK", () => { resetRun(); stopWatchIfIdle(); renderControls(); tick(); }]]);
@@ -522,13 +625,20 @@ function finishRun(){
   }
   const rec = { id: run.startedAt, start: run.startedAt, ms: total, dist: Math.round(run.dist*10)/10,
     elev: Math.round(run.elevGain), splitsM: run.splits.slice(), splitUnit: settings.unit, demo: run.demo,
-    pts: run.pts.map(p => [p.lat, p.lon, Math.round(p.el/1000), p.seg, p.alt]) };
+    pts: run.pts.map(p => [p.lat, p.lon, Math.round(p.el/1000), p.seg, p.alt]),
+    indoor: run.indoor, steps: run.steps, samples: downsample(run.samples) };
   runs.unshift(rec);
   const ok = saveRuns();
   say(`Run complete. ${fmtDist(rec.dist)} ${unitWord().toLowerCase()} in ${spokenTime(total)}.`);
   unlockScreen(); resetRun(); stopWatchIfIdle(); renderControls(); tick(); renderHistory();
   openRun(rec.id);
   if(!ok) modal("Couldn't save", "This browser blocked storage, so the run is shown but won't be kept after you close the page.", [["OK"]]);
+}
+function downsample(arr){
+  const out = []; let lastT = -99, lastSeg = null;
+  arr.forEach((p, i) => { const t = Math.round(p.el/1000);
+    if(t - lastT >= 5 || p.seg !== lastSeg || i === arr.length-1){ out.push([t, Math.round(p.d*10)/10, p.seg]); lastT = t; lastSeg = p.seg; } });
+  return out;
 }
 function stopWatchIfIdle(){ if(run.state === "idle") stopWatch(); }  // GPS off after a run to save battery
 
@@ -540,15 +650,24 @@ function tick(){
   $("pace").textContent = run.state==="running" && !run.autoPaused ? fmtPace(currentPace()) : `--'--"`;
   $("avg").textContent = run.dist > 30 ? fmtPace((el/1000)/(run.dist/M_PER())) : `--'--"`;
   $("cal").textContent = run.dist > 0 || el > 0 ? kcal(run.dist, el, run.elevGain) : 0;
-  $("elev").textContent = settings.unit==="mi" ? Math.round(run.elevGain*3.281) : Math.round(run.elevGain);
+  const indoorView = run.state === "idle" ? settings.mode === "indoor" : run.indoor;
+  $("elevLbl").textContent = indoorView ? "Cadence (spm)" : (settings.unit==="mi" ? "Elev Gain (ft)" : "Elev Gain (m)");
+  $("elev").textContent = indoorView ? (run.state==="running" ? cadence() || "--" : "--") : settings.unit==="mi" ? Math.round(run.elevGain*3.281) : Math.round(run.elevGain);
+  if(run.indoor && run.state === "running"){
+    if(run.motionSeen) setGps("good", `Indoor · ${run.steps.toLocaleString()} steps`);
+    if(settings.autopause && !run.autoPaused && run.lastStepAt && performance.now() - run.lastStepAt > 8000){
+      run.activeMs += performance.now() - run.resumedAt; run.autoPaused = true;
+      $("hint").textContent = "Auto-paused — start moving to resume"; say("Auto paused");
+    }
+  }
   const inSplit = run.dist - run.lastSplitDist;
   $("splitNow").textContent = run.dist > 30 && inSplit > 30 ? fmtPace(((el - run.lastSplitMs)/1000)/(inSplit/M_PER())) : "--";
   updatePocket();
-  if(document.getElementById("v-run").classList.contains("on")) drawRoute($("liveMap"), run.pts.map(p => [p.lat,p.lon,0,p.seg]), true);
+  if(document.getElementById("v-run").classList.contains("on")) drawRoute($("liveMap"), run.pts.map(p => [p.lat,p.lon,0,p.seg]), true, indoorView ? "Indoor run · distance from your steps" : "");
 }
 setInterval(tick, 500);
 
-function drawRoute(cv, pts, live){
+function drawRoute(cv, pts, live, label){
   const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
   if(!w || !h) return;
   if(cv.width !== w*dpr){ cv.width = w*dpr; cv.height = h*dpr; }
@@ -558,7 +677,8 @@ function drawRoute(cv, pts, live){
   for(let x = 0; x < w; x += 24){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); }
   for(let y = 0; y < h; y += 24){ g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
   if(pts.length < 1){
-    if(live){ g.fillStyle = "#8e8e93"; g.font = "600 13px Inter, sans-serif"; g.textAlign = "center"; g.fillText(run.state==="idle" ? "Your route will appear here" : "Waiting for GPS…", w/2, h/2+4); }
+    const txt = label || (live ? (run.state==="idle" ? "Your route will appear here" : "Waiting for GPS…") : "");
+    if(txt){ g.fillStyle = "#8e8e93"; g.font = `600 ${w < 100 ? 10 : 13}px Inter, sans-serif`; g.textAlign = "center"; g.fillText(txt, w/2, h/2+4); }
     return;
   }
   let minLat=Infinity,maxLat=-Infinity,minLon=Infinity,maxLon=-Infinity;
@@ -625,15 +745,24 @@ function renderHistory(){
   if(!runs.length){ box.innerHTML = `<div class="empty">No runs yet.<br>Lace up and hit Start.</div>`; return; }
   runs.slice(0,60).forEach(r => {
     const b = document.createElement("button"); b.className = "runcard";
-    b.innerHTML = `<canvas></canvas><div style="flex:1;min-width:0"><div class="t">${dateStr(r.start)} · ${timeOfDay(r.start)} Run${r.demo?" (sim)":""}</div>
+    b.innerHTML = `<canvas></canvas><div style="flex:1;min-width:0"><div class="t">${dateStr(r.start)} · ${timeOfDay(r.start)} Run${r.demo?" (sim)":""}${r.manual?" · Manual":r.indoor?" · Indoor":""}</div>
       <div class="d">${fmtDist(r.dist)} <span style="font-size:14px;font-style:normal;color:var(--dim);font-weight:600">${settings.unit}</span></div>
       <div class="s">${fmtPace((r.ms/1000)/(r.dist/M_PER()))} /${settings.unit} · ${fmtTime(r.ms)}</div></div>`;
     b.onclick = () => openRun(r.id);
     box.appendChild(b);
-    requestAnimationFrame(() => drawRoute(b.querySelector("canvas"), r.pts, false));
+    requestAnimationFrame(() => drawRoute(b.querySelector("canvas"), r.pts, false, r.pts.length ? "" : (r.manual ? "Manual" : "Indoor")));
   });
 }
 function computeSplits(r){
+  if(r.indoor || r.manual){
+    const unit = M_PER(), out = [], sm = r.samples || []; if(!sm.length) return out;
+    let next = unit, lastT = 0, prev = [0, 0];
+    sm.forEach(p => { while(p[1] >= next){ const f = (next - prev[1]) / Math.max(0.01, p[1] - prev[1]); const t = prev[0] + f*(p[0]-prev[0]);
+      out.push({ms:(t-lastT)*1000, full:true}); lastT = t; next += unit; } prev = p; });
+    const rem = r.dist - (next - unit);
+    if(rem > 30) out.push({ms: r.ms - lastT*1000, full:false, frac: rem/unit});
+    return out;
+  }
   // recompute splits from points in current unit
   const unit = M_PER(), out = []; let acc = 0, lastT = 0, next = unit, prev = null;
   r.pts.forEach(p => {
@@ -656,7 +785,7 @@ function openRun(id){
   $("sheetBody").innerHTML = `
     <div class="sheet-top"><button class="btn-sm" id="closeSheet">‹ Back</button><button class="btn-sm danger" id="delRun">Delete</button></div>
     <div style="color:var(--dim);font-weight:600;font-size:14px">${new Date(r.start).toLocaleString(undefined,{weekday:"long",month:"long",day:"numeric",hour:"numeric",minute:"2-digit"})}</div>
-    <div style="font-size:20px;font-weight:800;margin-top:2px">${timeOfDay(r.start)} Run${r.demo?" (simulated)":""}</div>
+    <div style="font-size:20px;font-weight:800;margin-top:2px">${timeOfDay(r.start)} Run${r.demo?" (simulated)":""}${r.manual?" · Manual entry":r.indoor?" · Indoor":""}</div>
     <div class="big" style="margin:18px 0 0;text-align:left"><div class="num" style="font-size:80px">${fmtDist(r.dist)}</div><div class="lbl">${unitWord()}</div></div>
     <div class="stats" style="margin:18px 0">
       <div class="stat"><div class="v">${fmtPace((r.ms/1000)/(r.dist/M_PER()))}</div><div class="l">Avg Pace</div></div>
@@ -665,7 +794,8 @@ function openRun(id){
     </div>
     <canvas class="route" id="detailMap" style="height:240px"></canvas>
     <div class="stats sm" style="margin:16px 0 0">
-      <div class="stat"><div class="v">${settings.unit==="mi"?Math.round(r.elev*3.281)+" ft":r.elev+" m"}</div><div class="l">Elev Gain</div></div>
+      ${r.indoor||r.manual ? `<div class="stat"><div class="v">${r.steps ? r.steps.toLocaleString() : "--"}</div><div class="l">Steps</div></div>`
+      : `<div class="stat"><div class="v">${settings.unit==="mi"?Math.round(r.elev*3.281)+" ft":r.elev+" m"}</div><div class="l">Elev Gain</div></div>`}
       <div class="stat"><div class="v">${paces.length?fmtPace(fastest):"--"}</div><div class="l">Fastest Split</div></div>
       <div class="stat"><div class="v">${sp.length}</div><div class="l">Splits</div></div>
     </div>
@@ -674,14 +804,14 @@ function openRun(id){
       ${sp.map((s,i) => { const pc = paces[i]; const wpct = slowest===fastest?100: 45 + 55*(slowest-pc)/(slowest-fastest);
         return `<tr><td>${s.full? i+1 : (s.frac).toFixed(2)}</td><td>${fmtPace(pc)}</td><td><div class="bar" style="width:${wpct}%;${pc===fastest&&sp.length>1?"":"opacity:.55"}"></div></td></tr>`; }).join("")}
     </table>` : `<div class="empty" style="padding:16px">Run a full ${unitWord(1).toLowerCase()} to see splits.</div>`}
-    <button class="btn-wide" id="gpxBtn">Export GPX</button>
-    <div class="hint" id="gpxHint" style="margin-top:8px">Upload GPX to Strava, Garmin or Nike Run Club’s web partners</div>`;
+    ${r.pts.length ? `<button class="btn-wide" id="gpxBtn">Export GPX</button>
+    <div class="hint" id="gpxHint" style="margin-top:8px">Upload GPX to Strava or Garmin</div>` : ""}`;
   $("sheet").classList.add("on"); $("sheet").scrollTop = 0;
-  requestAnimationFrame(() => drawRoute($("detailMap"), r.pts, false));
+  requestAnimationFrame(() => drawRoute($("detailMap"), r.pts, false, r.pts.length ? "" : (r.manual ? "Manual entry · no route" : "Indoor run · no route")));
   $("closeSheet").onclick = () => $("sheet").classList.remove("on");
   $("delRun").onclick = () => modal("Delete this run?", "This can't be undone.", [["Cancel"], ["Delete", () => {
     runs = runs.filter(x => x.id !== id); saveRuns(); $("sheet").classList.remove("on"); renderHistory(); }, "danger"]]);
-  $("gpxBtn").onclick = () => exportGpx(r);
+  if($("gpxBtn")) $("gpxBtn").onclick = () => exportGpx(r);
 }
 function exportGpx(r){
   const segs = {}; r.pts.forEach(p => (segs[p[3]] = segs[p[3]] || []).push(p));
@@ -758,13 +888,44 @@ $("saveProfile").onclick = () => {
 };
 loadProfile();
 $("demoBtn").onclick = startDemo;
+document.querySelectorAll("#modeSeg button").forEach(b => b.onclick = () => {
+  if(run.state !== "idle") return;
+  settings.mode = b.dataset.m; saveSettings();
+  if(settings.mode === "indoor"){ stopWatch(); setGps("", "Indoor · GPS off"); }
+  else setGps("", "GPS off");
+  renderControls(); tick();
+});
+function calText(){ $("calTxt").textContent = `Stride set to ${Math.round((settings.strideCal||1)*100)}% · adjusts when you correct distance`; }
+$("calReset").onclick = () => { settings.strideCal = 1; saveSettings(); calText(); };
+calText();
+$("addRunBtn").onclick = () => {
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  $("aDate").value = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  $("aTime").value = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  ["aDist","aH","aM","aS"].forEach(id => $(id).value = "");
+  $("aUnit").textContent = settings.unit;
+  $("addModal").classList.add("on");
+};
+$("aCancel").onclick = () => $("addModal").classList.remove("on");
+$("aSave").onclick = () => {
+  const dist = parseFloat($("aDist").value), h = +$("aH").value||0, m = +$("aM").value||0, sec = +$("aS").value||0;
+  const ms = (h*3600 + m*60 + sec)*1000;
+  const start = new Date(`${$("aDate").value}T${$("aTime").value || "12:00"}`).getTime();
+  if(!(dist > 0 && dist < 200) || !(ms > 0) || !isFinite(start)){ modal("Check the run", "Enter a date, a distance and a time.", [["OK"]]); return; }
+  let id = start; while(runs.some(r => r.id === id)) id++;
+  runs.push({ id, start, ms, dist: Math.round(dist*M_PER()*10)/10, elev:0, pts:[], indoor:true, manual:true, steps:0, samples:[], splitUnit:settings.unit });
+  runs.sort((a,b) => b.start - a.start);
+  const ok = saveRuns();
+  $("addModal").classList.remove("on"); renderHistory();
+  if(!ok) modal("Couldn't save", "This browser blocked storage.", [["OK"]]);
+};
 $("gpsToggle").onclick = () => { if(run.state !== "idle") return; run.watchId != null ? stopWatch() : startWatch(); };
 $("copyAll").onclick = async () => { const ok = await copyText(JSON.stringify(runs)); $("copyAll").textContent = ok ? "Copied" : "Blocked"; setTimeout(()=>$("copyAll").textContent="Copy",1500); };
 $("wipe").onclick = () => modal("Delete all runs?", `This removes ${runs.length} saved run${runs.length!==1?"s":""} from this device.`, [["Cancel"],["Delete all", () => { runs = []; saveRuns(); renderHistory(); }, "danger"]]);
 
 window.addEventListener("beforeunload", e => { if(run.state !== "idle" && !run.demo){ e.preventDefault(); e.returnValue = ""; } });
 
-applyUnit(); renderControls(); tick();
+applyUnit(); if(settings.mode === "indoor") setGps("", "Indoor · GPS off"); renderControls(); tick();
 })();
 </script>
 </body>
