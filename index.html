@@ -126,7 +126,8 @@
   <main>
     <!-- RUN VIEW -->
     <section class="view on" id="v-run">
-      <div class="gps"><div class="dot" id="gpsDot"></div><span id="gpsText">GPS idle</span></div>
+      <div class="gps"><div class="dot" id="gpsDot"></div><span id="gpsText">GPS off</span>
+        <button class="btn-sm" id="gpsToggle" style="margin-left:auto;font-size:13px;padding:7px 13px">Turn on GPS</button></div>
       <div class="big">
         <div class="num" id="dist">0.00</div>
         <div class="lbl" id="distLbl">Miles</div>
@@ -324,8 +325,20 @@ function startWatch(){
   try{
     run.watchId = navigator.geolocation.watchPosition(onFix, onGpsErr, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
   }catch(e){ gpsFail("Location is blocked here."); }
+  updateGpsToggle();
 }
-function stopWatch(){ if(run.watchId != null){ try{ navigator.geolocation.clearWatch(run.watchId); }catch(e){} } run.watchId = null; }
+function stopWatch(){
+  if(run.watchId != null){ try{ navigator.geolocation.clearWatch(run.watchId); }catch(e){} }
+  run.watchId = null; lastFix = null;
+  setGps("", "GPS off"); $("gpsMsg").style.display = "none";
+  updateGpsToggle();
+}
+function updateGpsToggle(){
+  const b = $("gpsToggle");
+  // GPS can't be switched off mid-run (it would stop distance tracking)
+  b.style.display = run.state === "idle" && !run.demo ? "" : "none";
+  b.textContent = run.watchId != null ? "Turn off GPS" : "Turn on GPS";
+}
 function onGpsErr(err){
   if(err.code === 1) gpsFail("Location permission was denied or is blocked on this page.");
   else if(err.code === 3) setGps("bad", "GPS timeout — searching…");
@@ -410,6 +423,7 @@ function currentPace(){
 
 /* ---------- controls ---------- */
 function renderControls(){
+  updateGpsToggle();
   const c = $("controls"); c.innerHTML = "";
   if(run.state === "idle"){
     const b = document.createElement("button"); b.className = "btn-round btn-go"; b.textContent = "START";
@@ -516,7 +530,7 @@ function finishRun(){
   openRun(rec.id);
   if(!ok) modal("Couldn't save", "This browser blocked storage, so the run is shown but won't be kept after you close the page.", [["OK"]]);
 }
-function stopWatchIfIdle(){ /* keep GPS warm while on Run tab for quick restart */ }
+function stopWatchIfIdle(){ if(run.state === "idle") stopWatch(); }  // GPS off after a run to save battery
 
 /* ---------- live render ---------- */
 function tick(){
@@ -569,7 +583,7 @@ function drawRoute(cv, pts, live){
 function startDemo(){
   if(run.state !== "idle"){ return; }
   showView("run");
-  $("gpsMsg").style.display = "none";
+  stopWatch();
   resetRun(); run.demo = true; run.state = "running"; run.startedAt = Date.now(); run.resumedAt = performance.now();
   setGps("good", "Simulated GPS");
   // loop around a park, ~3.2 m/s at 10x speed
@@ -587,7 +601,7 @@ function startDemo(){
   }, 1000);
   say("Starting simulated run"); renderControls();
 }
-function stopDemo(){ clearInterval(run.demoTimer); run.demoTimer = null; setGps("", "GPS idle"); }
+function stopDemo(){ clearInterval(run.demoTimer); run.demoTimer = null; setGps("", "GPS off"); }
 
 /* ---------- history ---------- */
 let period = "week";
@@ -744,6 +758,7 @@ $("saveProfile").onclick = () => {
 };
 loadProfile();
 $("demoBtn").onclick = startDemo;
+$("gpsToggle").onclick = () => { if(run.state !== "idle") return; run.watchId != null ? stopWatch() : startWatch(); };
 $("copyAll").onclick = async () => { const ok = await copyText(JSON.stringify(runs)); $("copyAll").textContent = ok ? "Copied" : "Blocked"; setTimeout(()=>$("copyAll").textContent="Copy",1500); };
 $("wipe").onclick = () => modal("Delete all runs?", `This removes ${runs.length} saved run${runs.length!==1?"s":""} from this device.`, [["Cancel"],["Delete all", () => { runs = []; saveRuns(); renderHistory(); }, "danger"]]);
 
